@@ -1,0 +1,224 @@
+/***********************************************************************************
+* Наименование модуля	: Оисание регистров MODBUS, функции чтения и записи платы РЕЛЕ
+*-----------------------------------------------------------------------------------
+* Версия				: 1.0
+* Автор					: Тимофеев
+* Дата создания			: 21.08.2020
+************************************************************************************/
+
+//--- INCLUDES -------------------
+#include "FreeRTOS.h"
+#include "task.h"
+#include "modbus_regs.h"
+
+#include "FM24V02.h"
+#include "AnaInputs.h"
+
+// --- DEFINES -------------------
+
+// --- TYPES ---------------------
+
+//--- CONSTANTS ------------------
+
+// описательные регистры
+const uint16_t gDescRegs[] = {
+	0xAAAA,	// vendor_id
+	0x1111, // product_id
+	0x0100,	// firmware_version
+	0x0000,	// firmware_git_hash_0
+	0x0000,	// firmware_git_hash_1
+	0x0000,	// firmware_git_hash_2
+	0x0000,	// firmware_git_hash_3
+	0x0000,	// firmware_build_timestamp_0
+	0x0000	// firmware_build_timestamp_1
+};
+
+//--- FORWARD --------------------
+TRegEntry * get_regentry_by_regaddr( uint16_t regaddr );
+int readDescReg( uint16_t idx );
+int readAddIn( uint16_t idx );
+bool writeAddIn( uint16_t idx, uint16_t val );
+int readStatus( uint16_t idx );
+bool writeStatus( uint16_t idx, uint16_t val );
+
+//--- GLOBAL VARIABLES -----------
+
+extern uint16_t g_Status;
+
+uint16_t regs_addin[15] = {
+	0, 0, 0, 0xBEB0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 
+};
+
+//--- EXTERN ---------------------
+extern uint8_t GetDeviceAddress(void);
+extern int ReadWorkMode( uint16_t idx );
+
+// Регистры платы универсальных входов
+TRegEntry RegEntries[] = 
+{
+	{.addr=0, .idx = 0, .read = readDescReg, .write=0, },
+	{.addr=1, .idx = 1, .read = readDescReg, .write=0, },
+	{.addr=2, .idx = 2, .read = readDescReg, .write=0, },
+	{.addr=3, .idx = 3, .read = readDescReg, .write=0, },
+	{.addr=4, .idx = 4, .read = readDescReg, .write=0, },
+	{.addr=5, .idx = 5, .read = readDescReg, .write=0, },
+	{.addr=6, .idx = 6, .read = readDescReg, .write=0, },
+	{.addr=7, .idx = 7, .read = readDescReg, .write=0, },
+	{.addr=8, .idx = 8, .read = readDescReg, .write=0, },
+	
+	{.addr=30, .idx = 0, .read = readAddIn, .write=writeAddIn, },
+	{.addr=31, .idx = 1, .read = readAddIn, .write=0, },
+	{.addr=32, .idx = 2, .read = readAddIn, .write=0, },
+	
+	{.addr=50, .idx = 3, .read = readAddIn, .write=writeAddIn, },
+	{.addr=51, .idx = 4, .read = readAddIn, .write=writeAddIn, },
+	{.addr=52, .idx = 5, .read = readAddIn, .write=writeAddIn, },
+	{.addr=53, .idx = 6, .read = readAddIn, .write=writeAddIn, },
+	{.addr=54, .idx = 7, .read = readAddIn, .write=writeAddIn, },
+	{.addr=55, .idx = 8, .read = readAddIn, .write=writeAddIn, },
+	{.addr=56, .idx = 9, .read = readAddIn, .write=writeAddIn, },
+	{.addr=57, .idx = 10, .read = readAddIn, .write=writeAddIn, },
+	{.addr=58, .idx = 11, .read = readAddIn, .write=writeAddIn, },
+	{.addr=59, .idx = 12, .read = readAddIn, .write=writeAddIn, },
+
+	{.addr=START_REG_VALUES-1, .idx = 0, .read = readStatus, .write=writeStatus, },
+
+	{.addr=START_REG_VALUES+0, .idx = 0, .read = AInp_ReadAdcValue, .write=0 },
+	{.addr=START_REG_VALUES+1, .idx = 1, .read = AInp_ReadAdcValue, .write=0 },
+	{.addr=START_REG_VALUES+2, .idx = 0, .read = AInp_ReadPhValue, .write=0 },
+	{.addr=START_REG_VALUES+3, .idx = 1, .read = AInp_ReadPhValue, .write=0 },
+	{.addr=START_REG_VALUES+4, .idx = 0, .read = AInp_ReadSystemPh, .write=0 },
+
+	{.addr=START_REG_VALUES+5, .idx = 0, .read = AInp_ReadAdcTar1, .write=AInp_WriteAdcTar1 },
+	{.addr=START_REG_VALUES+6, .idx = 0, .read = AInp_ReadPhTar1, .write=AInp_WritePhTar1 },
+	{.addr=START_REG_VALUES+7, .idx = 0, .read = AInp_ReadAdcTar2, .write=AInp_WriteAdcTar2 },
+	{.addr=START_REG_VALUES+8, .idx = 0, .read = AInp_ReadPhTar2, .write=AInp_WritePhTar2 },
+
+	{.addr=START_REG_VALUES+9, .idx = 1, .read = AInp_ReadAdcTar1, .write=AInp_WriteAdcTar1 },
+	{.addr=START_REG_VALUES+10, .idx = 1, .read = AInp_ReadPhTar1, .write=AInp_WritePhTar1 },
+	{.addr=START_REG_VALUES+11, .idx = 1, .read = AInp_ReadAdcTar2, .write=AInp_WriteAdcTar2 },
+	{.addr=START_REG_VALUES+12, .idx = 1, .read = AInp_ReadPhTar2, .write=AInp_WritePhTar2 },
+
+	{.addr=START_REG_VALUES+13, .idx = 0, .read = ReadWorkMode, .write=0 },
+};
+
+//--- FUNCTIONS ------------------
+
+int readDescReg( uint16_t idx )
+{
+	return gDescRegs[idx];
+}
+
+int readAddIn( uint16_t idx )
+{
+	return gDescRegs[idx];
+}
+
+bool writeAddIn( uint16_t idx, uint16_t val )
+{
+	if( idx > 14 ) return false;
+	regs_addin[idx] = val;
+	return true;
+}
+
+int readStatus( uint16_t idx )
+{
+	return g_Status;
+}
+
+bool writeStatus( uint16_t idx, uint16_t val )
+{
+	g_Status = val;
+	return true;
+}
+
+/*******************************************************
+Функция		: Пытается прочитать значение указанного регистра
+Параметр 1	: индекс регистра
+Параметр 2	: следующий байт
+Возвр. знач.: флаг - значение прочитано
+********************************************************/
+bool REG_Read( uint16_t RegAddr, uint16_t * pValue )
+{
+	if( !pValue )
+		return false;
+	
+	TRegEntry * pReg = get_regentry_by_regaddr( RegAddr );
+	if( pReg )
+	{
+		if( pReg->read )
+		{
+			int result = pReg->read( pReg->idx );
+			if( result >= 0 )
+			{
+				*pValue = (uint16_t) result;
+				return true;
+			}
+		}
+	}
+
+	return false;
+}	
+
+/*******************************************************
+Функция		: Пытается прочитать значение указанного регистра
+Параметр 1	: индекс регистра
+Параметр 2	: следующий байт
+Возвр. знач.: флаг - значение прочитано
+********************************************************/
+bool REG_Write( uint16_t RegAddr, uint16_t value )
+{
+	TRegEntry * pReg = get_regentry_by_regaddr( RegAddr );
+	if( pReg )
+	{
+		if( pReg->write )
+		{
+			bool result = pReg->write( pReg->idx, value );
+			return result;
+		}
+	}
+	return false;
+}	
+
+/*******************************************************
+Функция		: Проверяет регистр на возможность записи в него
+Параметр 1	: номер регистра
+Возвр. знач.: флаг - запись разрешена 
+********************************************************/
+bool REG_isWriteEnable( uint16_t regAddr )
+{
+	TRegEntry * pReg = get_regentry_by_regaddr( regAddr );
+	if( pReg )
+	{
+		if( pReg->write )
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/*******************************************************
+Функция		: Ищет регистр по его адресу
+Параметр 1	: адрес регистра
+Возвр. знач.: указатель на структуру регистра
+********************************************************/
+TRegEntry * get_regentry_by_regaddr( uint16_t regaddr )
+{
+	TRegEntry * regEntry = 0;
+
+	uint16_t total = sizeof(RegEntries);
+	uint16_t one = sizeof(TRegEntry);
+	uint16_t count = total / one;	// Количество регистров
+	
+	for( int i=0; i<count; i++ )
+	{
+		if( RegEntries[i].addr == regaddr )
+		{
+			regEntry = &(RegEntries[i]);
+			break;
+		}
+	}
+	return regEntry;
+}
