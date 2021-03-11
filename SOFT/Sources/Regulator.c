@@ -8,6 +8,9 @@
 
 //--- INCLUDES -------------------
 #include "Regulator.h"
+#include "Leds.h"
+#include "AnaInputs.h"
+#include "leds-dig.h"
 
 //--- CONSTANTS ------------------
 const TRelDesc Relay[] = {
@@ -19,7 +22,8 @@ const TRelDesc Relay[] = {
 
 //--- FUNCTIONS ------------------
 extern int ReadWorkMode( uint16_t idx );
-extern bool IsWaterOk( void );
+extern float g_Sensor_PH;					// текущее значение PH с датчиков
+extern float g_Setup_PH;					// заданное пользователем значение PH
 
 /*******************************************************
 ‘ункци€		: »нициализаци€ железа
@@ -38,9 +42,69 @@ void Reg_Init(void)
 	}
 }
 
-void regulator_cycle( void )
+/*******************************************************
+	¬озвращает состо€ние датчика протока воды
+********************************************************/
+bool IsWaterOk( void )
 {
-	vTaskDelay(10);
+	bool isOk;
+	isOk = ( GPIO_PinRead( PORT_SENS_WATER, PIN_SENS_WATER ) == 0 );
+	
+	return isOk;
+}
+
+float getPidValue( float errorPh, float deltaTime, float prevPh )
+{
+    float pidValue = 0, integralValue, diffValue;
+	static float prevIntegralValue = 0;
+	const float K_INTEGRAL = 0.005;
+	const float K_DIFF = 0.005;
+	const float K_PROP = 0.25;
+
+    integralValue = prevIntegralValue + (errorPh * deltaTime);
+    prevIntegralValue = integralValue;
+    integralValue *= K_INTEGRAL;
+
+    diffValue = K_DIFF * (( g_Sensor_PH - prevPh ) / deltaTime);
+
+    pidValue = K_PROP * (errorPh + integralValue + diffValue);
+
+    return pidValue;
+}
+
+
+/*******************************************************
+	ќдин цикл регулировани€ PH
+********************************************************/
+void regulator_cycle( float deltaTime )
+{
+	static float prevPh = 5;
+	
+	float errorPh, pidValue;
+	
+	errorPh = g_Setup_PH - g_Sensor_PH;
+	
+	if(( errorPh < 0.1 ) || ( errorPh > -0.1 ))
+	{
+		// здесь мы в пределах допуска, останавливаем регул€тор
+		Reg_RelayAllOff();
+		return;
+	}
+	
+	pidValue = getPidValue( errorPh, deltaTime, prevPh );
+	
+	prevPh = g_Sensor_PH;
+	
+	if( pidValue > 0 )
+	{
+		Reg_RelayOn( REL_PLUS );
+		Reg_RelayOff( REL_MINUS );
+	}
+	else
+	{
+		Reg_RelayOff( REL_PLUS );
+		Reg_RelayOn( REL_MINUS );
+	}
 }
 
 /*******************************************************
@@ -51,21 +115,96 @@ void regulator_cycle( void )
 void Thread_Regulator( void *pvParameters )
 {
 	Reg_Init();
+
+	const TickType_t CYCLETIME_MS = 50;				// интервал между циклами регулировани€
+	const TickType_t MAX_OUT_OF_WATER_MS = 2000;	// макс. длительность отсустви€ воды дл€ аварии
+	const TickType_t MAX_ERROR_PH_MS = 120000;		// макс. длительность ошибки установки PH
 	
+	
+	TickType_t xLastWakeTime;
+	int timeOutOfWater = 0;
+	int timeOutErrorPhValue = 0;
+	bool isAlarmOutOfWater = false;
+	bool isAlarmSensPh = false;
+
+	// Initialise the xLastWakeTime variable with the current time.
+	xLastWakeTime = xTaskGetTickCount();
 	for(;;)
 	{
-		vTaskDelay(50);
+		// Wait for the next cycle.
+		vTaskDelayUntil( &xLastWakeTime, CYCLETIME_MS );
 		
-		if( ReadWorkMode(0) == Mode_RegulatorPh )
+		if( ReadWorkMode(0) != Mode_RegulatorPh )
 		{
-			if( IsWaterOk() )
-			{
-				regulator_cycle();
-			}
+			Led_Off( LED_ERR_WATER );
+			Led_Off( LED_OK );
+
+			isAlarmOutOfWater = false;
+			isAlarmSensPh = false;
+			timeOutOfWater = 0;
+			timeOutErrorPhValue = 0;
+
+			continue;
+		}
+
+		// провер€ем наличие воды
+		if( IsWaterOk() )
+		{
+			Led_Off( LED_ERR_WATER );
+			isAlarmOutOfWater = false;
 		}
 		else
 		{
-			Reg_RelayAllOff();
+			timeOutOfWater += CYCLETIME_MS;
+			if( timeOutOfWater > MAX_OUT_OF_WATER_MS )
+			{
+				isAlarmOutOfWater = true;
+			}
+		}
+		// провер€ем ошибки по датчикам PH и выводим на дисплей значени€ PH
+		g_Sensor_PH = AInp_GetSystemPh();
+		if( g_Sensor_PH < 0 )
+		{
+			isAlarmSensPh = true;
+		}
+		else
+		{
+			isAlarmSensPh = false;
+		}
+		LcdDig_PrintPH( g_Sensor_PH, SideLEFT );
+		LcdDig_PrintPH( g_Setup_PH, SideRIGHT );
+		
+		if( !isAlarmOutOfWater && !isAlarmSensPh )
+		{
+			Led_On( LED_OK );
+			Led_Off( LED_ERR_WATER );
+			Led_Off( LED_ERR_SENS_PH );
+			
+			regulator_cycle( (float)CYCLETIME_MS / 1000.0 );
+			
+			if( fabs( g_Sensor_PH - g_Setup_PH ) > 0.5 )
+			{
+				timeOutErrorPhValue += CYCLETIME_MS;
+				if( timeOutErrorPhValue > MAX_ERROR_PH_MS )
+				{
+					timeOutErrorPhValue = 0;
+					Led_On( LED_ERR_REGPH );
+				}
+			}
+			else 
+			{
+				timeOutErrorPhValue += 0;
+				Led_Off( LED_ERR_REGPH );
+			}
+			
+		}
+		else 
+		{
+			Led_Off( LED_OK );
+			if( isAlarmSensPh )
+				Led_On( LED_ERR_SENS_PH );
+			if( isAlarmOutOfWater )
+				Led_On( LED_ERR_WATER );
 		}
 	}
 }

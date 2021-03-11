@@ -149,3 +149,38 @@ void Thread_Leds_Dig( void *pvParameters )
 		vTaskDelay(500);
 	}
 }
+
+void LcdDig_PrintPH( float valuePH, ELcdSide side )
+{
+	TLedDig ledDig;
+	int startIndex = side == SideLEFT ? 0 : 2;
+	
+	if( valuePH < 0 )
+	{
+		ledDig.isBlinking = true;
+		ledDig.isOn = true;
+		ledDig.isPoint = false;
+		ledDig.value = 11;
+		LcdDig_SetDigit( startIndex, &ledDig );
+		LcdDig_SetDigit( startIndex+1, &ledDig );
+	}
+	else
+	{
+		if( valuePH > 9.9 )
+			valuePH = 9.9;
+		
+		int beforePoint = valuePH;
+		int afterPoint = ((float)(valuePH - beforePoint)) * 10.0;
+		
+		ledDig.isBlinking = false;
+		ledDig.isOn = true;
+		ledDig.isPoint = true;
+		ledDig.value = beforePoint;
+		LcdDig_SetDigit( startIndex, &ledDig );
+		
+		ledDig.isPoint = false;
+		ledDig.value = afterPoint;
+		LcdDig_SetDigit( startIndex+1, &ledDig );
+	}
+}
+
