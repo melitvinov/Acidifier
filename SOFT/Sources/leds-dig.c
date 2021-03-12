@@ -184,3 +184,18 @@ void LcdDig_PrintPH( float valuePH, ELcdSide side )
 	}
 }
 
+void LcdDig_DispBlinkOff( void )
+{
+	for( int i=0; i<4; i++ )
+	{
+		g_LedDig[i].isBlinking = false;
+	}
+}
+
+void LcdDig_DispBlinkOn( void )
+{
+	for( int i=0; i<4; i++ )
+	{
+		g_LedDig[i].isBlinking = true;
+	}
+}

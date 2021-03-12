@@ -26,6 +26,8 @@
 static uint8_t g_DeviceAddr = 0;	// текущий адрес устройства на шине RS-485
 uint16_t g_Status;					// текущий статус устройства (0-была перезагрузка)
 EWorkMode g_WorkMode;				// текущий режим работы / отображения
+int g_indxCalibrPointPh;			// текущий индекс калибровочной точки Ph
+
 float g_Sensor_PH;					// текущее значение PH с датчиков
 float g_Setup_PH;					// заданное пользователем значение PH
 
@@ -97,6 +99,7 @@ void SwitchWorkMode( EWorkMode newWorkMode )
 		case Mode_Calibrating:
 			Reg_RelayAllOff();
 			Led_On( LED_TAR_P1 );
+			g_indxCalibrPointPh = 0;
 			break;
 	}
 }
@@ -254,7 +257,7 @@ void SetupPhValue( float value )
 ********************************************************/
 void Thread_WORK( void *pvParameters )
 {
-	float ph1, ph2;
+	float ph1, ph2, f_tar;
 	
 	g_Status = 0;
 	
@@ -319,6 +322,59 @@ void Thread_WORK( void *pvParameters )
 				break;
 			
 			case Mode_Calibrating:
+				// Отображение значения калибровочного раствора
+				if( g_indxCalibrPointPh == 0 )
+				{
+					// калибруется первая точка Ph
+					Led_On( LED_TAR_P1 );
+					Led_Off( LED_TAR_P2 );
+					f_tar = AInp_ReadPhTar1(0);
+				}
+				else
+				{
+					// калибруется вторая точка Ph
+					Led_Off( LED_TAR_P1 );
+					Led_On( LED_TAR_P2 );
+					f_tar = AInp_ReadPhTar1(1);
+				}
+				f_tar /= 100.0;
+				LcdDig_PrintPH( f_tar, SideLEFT );
+				LcdDig_PrintPH( f_tar, SideRIGHT );
+				
+				if( g_isDblBtnPressed )
+				{
+					// Подтверждение калибровки точки
+					// Отображение подтверждения
+					LcdDig_DispBlinkOn();
+					vTaskDelay( 2000 );
+					LcdDig_DispBlinkOff();
+					// сброс нажатых кнопок
+					g_isDblBtnPressed = false;
+					g_isBtnPlusClick = false;
+					g_isBtnMinusClick = false;
+					// запись калибровки
+					if( g_indxCalibrPointPh == 0 )
+					{
+						// первая точка
+						AInp_WriteAdcTar1( 0, AInp_ReadAdcValue( 0 ) );
+						g_indxCalibrPointPh = 1;
+					}
+					else
+					{
+						// вторая точка
+						AInp_WriteAdcTar1( 1, AInp_ReadAdcValue( 1 ) );
+						SwitchWorkMode( Mode_RegulatorPh );
+					}
+				}
+				else if( g_isBtnPlusClick || g_isBtnMinusClick )
+				{
+					// отмена калибровки, возврат в режим работы
+					g_isDblBtnPressed = false;
+					g_isBtnPlusClick = false;
+					g_isBtnMinusClick = false;
+					SwitchWorkMode( Mode_RegulatorPh );
+				}
+				
 				break;
 			
 			default:

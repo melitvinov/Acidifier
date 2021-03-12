@@ -57,9 +57,9 @@ float getPidValue( float errorPh, float deltaTime, float prevPh )
 {
     float pidValue = 0, integralValue, diffValue;
 	static float prevIntegralValue = 0;
-	const float K_INTEGRAL = 0.005;
-	const float K_DIFF = 0.005;
-	const float K_PROP = 0.25;
+	const float K_INTEGRAL = 0.1;
+	const float K_DIFF = 0.05;
+	const float K_PROP = 2.0;
 
     integralValue = prevIntegralValue + (errorPh * deltaTime);
     prevIntegralValue = integralValue;
@@ -78,32 +78,36 @@ float getPidValue( float errorPh, float deltaTime, float prevPh )
 ********************************************************/
 void regulator_cycle( float deltaTime )
 {
-	static float prevPh = 5;
+	static float prevPh = 8;
 	
 	float errorPh, pidValue;
 	
-	errorPh = g_Setup_PH - g_Sensor_PH;
+	errorPh = g_Sensor_PH - g_Setup_PH;
 	
-	if(( errorPh < 0.1 ) || ( errorPh > -0.1 ))
-	{
-		// здесь мы в пределах допуска, останавливаем регулятор
-		Reg_RelayAllOff();
-		return;
-	}
+//	if(( errorPh < 0.1 ) || ( errorPh > -0.1 ))
+//	{
+//		// здесь мы в пределах допуска, останавливаем регулятор
+//		Reg_RelayAllOff();
+//		return;
+//	}
 	
 	pidValue = getPidValue( errorPh, deltaTime, prevPh );
 	
 	prevPh = g_Sensor_PH;
 	
-	if( pidValue > 0 )
+	if( pidValue > 0.1 )
 	{
 		Reg_RelayOn( REL_PLUS );
 		Reg_RelayOff( REL_MINUS );
 	}
-	else
+	else if( pidValue < -0.1 )
 	{
 		Reg_RelayOff( REL_PLUS );
 		Reg_RelayOn( REL_MINUS );
+	}
+	else
+	{
+		Reg_RelayAllOff();
 	}
 }
 
@@ -116,9 +120,9 @@ void Thread_Regulator( void *pvParameters )
 {
 	Reg_Init();
 
-	const TickType_t CYCLETIME_MS = 50;				// интервал между циклами регулирования
+	const TickType_t CYCLETIME_MS = 500;			// интервал между циклами регулирования
 	const TickType_t MAX_OUT_OF_WATER_MS = 2000;	// макс. длительность отсуствия воды для аварии
-	const TickType_t MAX_ERROR_PH_MS = 120000;		// макс. длительность ошибки установки PH
+	const TickType_t MAX_ERROR_PH_MS = 90000;		// макс. длительность ошибки установки PH
 	
 	
 	TickType_t xLastWakeTime;
@@ -193,7 +197,7 @@ void Thread_Regulator( void *pvParameters )
 			}
 			else 
 			{
-				timeOutErrorPhValue += 0;
+				timeOutErrorPhValue = 0;
 				Led_Off( LED_ERR_REGPH );
 			}
 			
@@ -204,7 +208,11 @@ void Thread_Regulator( void *pvParameters )
 			if( isAlarmSensPh )
 				Led_On( LED_ERR_SENS_PH );
 			if( isAlarmOutOfWater )
+			{
 				Led_On( LED_ERR_WATER );
+				// здесь надо закрыть кран с кислотой как то...
+				// ... доделать !
+			}
 		}
 	}
 }

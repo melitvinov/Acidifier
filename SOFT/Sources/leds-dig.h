@@ -35,7 +35,8 @@ void Thread_Leds_Dig( void *pvParameters );
 
 void LcdDig_init(void);
 void LcdDig_SetDigit( uint8_t idx, TLedDig * value );
-
 void LcdDig_PrintPH( float valuePH, ELcdSide side );
+void LcdDig_DispBlinkOff( void );
+void LcdDig_DispBlinkOn( void );
 
 #endif
