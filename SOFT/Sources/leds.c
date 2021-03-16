@@ -11,6 +11,7 @@
 
 //--- CONSTANTS ------------------
 const TLedDesc LedArray[] = {
+	{PORT_LED_SYS, PIN_LED_SYS},
 	{PORT_LED_OK, PIN_LED_OK},
 	{PORT_LED_ERR1, PIN_LED_ERR1},
 	{PORT_LED_ERR2, PIN_LED_ERR2},

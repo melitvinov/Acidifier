@@ -197,15 +197,12 @@ void MBUS_Thread( void *pvParameters )
 	// »нициализаци€ RS-485, разрешение прерываний от USART
 	Rs485_Init();
 	
-	g_Status = 0;
-	
+
 	// Ќачинаем прием пакетов
 	startReceiveMessages();
 	// бесконечный цикл работы modbus
 	for(;;)
 	{
-		Led_Off(LED_SYS);
-		
 		vTaskDelay(1);
 
 		if( IsPacketReady )
@@ -223,6 +220,7 @@ void MBUS_Thread( void *pvParameters )
 			}
 			
 			startReceiveMessages();
+			Led_Off(LED_SYS);
 		}
 	}
 }

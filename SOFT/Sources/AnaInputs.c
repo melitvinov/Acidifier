@@ -25,11 +25,11 @@ const uint8_t ainputs[] =
 const uint8_t PH_CHANNELS_COUNT = sizeof(ainputs) / sizeof( uint8_t );
 
 // тарировочная точка по умолчанию для датчиков PH
-const TTarPoint DefaultPhTarPoint_1 = {2000, 740};
-const TTarPoint DefaultPhTarPoint_2 = {3150, 430};
+const TTarPoint DefaultPhTarPoint_1 = {2000, 70};
+const TTarPoint DefaultPhTarPoint_2 = {3150, 40};
 
 //--- GLOBAL VARIABLES -----------
-uint16_t sensorsPH_values[PH_CHANNELS_COUNT];	// в массиве хранятся вычисленные значения датчиков PH (float * 100)
+uint16_t sensorsPH_values[PH_CHANNELS_COUNT];	// в массиве хранятся вычисленные значения датчиков PH (float * 10)
 uint16_t sensorsPH_adc[PH_CHANNELS_COUNT];		// в массиве хранятся оцифрованные значения датчиков PH (0-4095)
 TTarTable Tar_tables[PH_CHANNELS_COUNT];		// в массиве хранятся тарировочные точки для датчиков PH
 
@@ -152,7 +152,7 @@ bool AInp_WritePhTar2( uint16_t idx, uint16_t val )
 float AInp_GetFloatSensorPh( uint8_t idx )
 {
 	float value = AInp_ReadPhValue( idx );
-	value /= 100.0;
+	value /= 10.0;
 	
 	return value;
 }
@@ -161,8 +161,6 @@ float AInp_GetSystemPh( void )
 {
 	float value1 = AInp_GetFloatSensorPh( 0 );
 	float value2 = AInp_GetFloatSensorPh( 1 );
-	value1 /= 100.0;
-	value2 /= 100.0;
 	
 	float value = 0;
 	if( value1 < 0 || value2 < 0 )
@@ -191,7 +189,7 @@ int AInp_ReadSystemPh( uint16_t idx )
 	}
 	else
 	{
-		ivalue = fvalue * 100.0;
+		ivalue = roundf( fvalue * 10.0 );
 	}
 	
 	return ivalue;
@@ -212,11 +210,16 @@ void AInp_Thread( void *pvParameters )
 	
 	// Получаем тарировочные точки из EEPROM
 	memset( &Tar_tables, 0, sizeof(Tar_tables) );
-	if( !FM24_ReadWords( EEADR_TAR_PH1_P1_ADC, (uint16_t*) &Tar_tables, PH_CHANNELS_COUNT * sizeof( TTarPoint ) ) || 
+	
+	bool isTarExists = false;
+
+	isTarExists = FM24_ReadWords( EEADR_TAR_PH1_P1_ADC, (uint16_t*) &Tar_tables, PH_CHANNELS_COUNT * sizeof( TTarPoint ) );
+	
+	if( !isTarExists || 
 		Tar_tables[0].point1.adc_value == 0 || 
 		Tar_tables[0].point2.adc_value == 0 )
 	{
-		// не удалось получить из EEPROM, устанавливаем тарировочные точки по умолчанию
+		// не удалось получить из EEPROM, или точки нулевые, устанавливаем тарировочные точки по умолчанию
 		set_default_tar_points();
 	}
 	

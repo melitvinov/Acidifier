@@ -52,6 +52,8 @@ uint16_t regs_addin[15] = {
 //--- EXTERN ---------------------
 extern uint8_t GetDeviceAddress(void);
 extern int ReadWorkMode( uint16_t idx );
+extern int ReadSetupPhValue( uint16_t idx );
+extern bool WriteSetupPhValue( uint16_t idx, uint16_t val );
 
 // Регистры платы универсальных входов
 TRegEntry RegEntries[] = 
@@ -88,16 +90,17 @@ TRegEntry RegEntries[] =
 	{.addr=START_REG_VALUES+2, .idx = 0, .read = AInp_ReadPhValue, .write=0 },
 	{.addr=START_REG_VALUES+3, .idx = 1, .read = AInp_ReadPhValue, .write=0 },
 	{.addr=START_REG_VALUES+4, .idx = 0, .read = AInp_ReadSystemPh, .write=0 },
+	{.addr=START_REG_VALUES+5, .idx = 0, .read = ReadSetupPhValue, .write=WriteSetupPhValue },
 
-	{.addr=START_REG_VALUES+5, .idx = 0, .read = AInp_ReadAdcTar1, .write=AInp_WriteAdcTar1 },
-	{.addr=START_REG_VALUES+6, .idx = 0, .read = AInp_ReadPhTar1, .write=AInp_WritePhTar1 },
-	{.addr=START_REG_VALUES+7, .idx = 0, .read = AInp_ReadAdcTar2, .write=AInp_WriteAdcTar2 },
-	{.addr=START_REG_VALUES+8, .idx = 0, .read = AInp_ReadPhTar2, .write=AInp_WritePhTar2 },
+	{.addr=START_REG_TAR_POINT+0, .idx = 0, .read = AInp_ReadAdcTar1, .write=AInp_WriteAdcTar1 },
+	{.addr=START_REG_TAR_POINT+1, .idx = 0, .read = AInp_ReadPhTar1, .write=AInp_WritePhTar1 },
+	{.addr=START_REG_TAR_POINT+2, .idx = 0, .read = AInp_ReadAdcTar2, .write=AInp_WriteAdcTar2 },
+	{.addr=START_REG_TAR_POINT+3, .idx = 0, .read = AInp_ReadPhTar2, .write=AInp_WritePhTar2 },
 
-	{.addr=START_REG_VALUES+9, .idx = 1, .read = AInp_ReadAdcTar1, .write=AInp_WriteAdcTar1 },
-	{.addr=START_REG_VALUES+10, .idx = 1, .read = AInp_ReadPhTar1, .write=AInp_WritePhTar1 },
-	{.addr=START_REG_VALUES+11, .idx = 1, .read = AInp_ReadAdcTar2, .write=AInp_WriteAdcTar2 },
-	{.addr=START_REG_VALUES+12, .idx = 1, .read = AInp_ReadPhTar2, .write=AInp_WritePhTar2 },
+	{.addr=START_REG_TAR_POINT+4, .idx = 1, .read = AInp_ReadAdcTar1, .write=AInp_WriteAdcTar1 },
+	{.addr=START_REG_TAR_POINT+5, .idx = 1, .read = AInp_ReadPhTar1, .write=AInp_WritePhTar1 },
+	{.addr=START_REG_TAR_POINT+6, .idx = 1, .read = AInp_ReadAdcTar2, .write=AInp_WriteAdcTar2 },
+	{.addr=START_REG_TAR_POINT+7, .idx = 1, .read = AInp_ReadPhTar2, .write=AInp_WritePhTar2 },
 
 	{.addr=START_REG_VALUES+13, .idx = 0, .read = ReadWorkMode, .write=0 },
 };

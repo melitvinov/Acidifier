@@ -8,10 +8,11 @@
 
 //--- INCLUDES -------------------
 #include "leds-dig.h"
+#include "math.h"
 
 //--- CONSTANTS ------------------
 uint8_t DIGIT[] = {
-	0x36,	// '0'
+	0x3F,	// '0'
 	0x06,	// '1'
 	0x5B,	// '2'
 	0x4F,	// '3'
@@ -24,12 +25,23 @@ uint8_t DIGIT[] = {
 	0x40,	// '-'
 };
 
+const int CLOCK_DELAY_TIME = 200;
+const int LATCH_DELAY_TIME = 200;
+
 //--- GLOBAL VARIABLES -----------
 
 TLedDig g_LedDig[4];	// текущее состояние четырех цифр дисплея
 
 
 //--- FUNCTIONS ------------------
+void delay_cycles( int num )
+{
+	while( num >= 0 )
+	{
+		num--;
+	}
+}
+
 /*******************************************************
 Функция		: Установка отображаемой цифры
 Параметр 1	: нет
@@ -62,54 +74,115 @@ void LcdDig_init(void)
 
 void lcd_clock( void )
 {
+	delay_cycles(CLOCK_DELAY_TIME);
 	GPIO_PinWrite( PORT_LED_CLOCK, PIN_LED_CLOCK, 1 );
+	delay_cycles(CLOCK_DELAY_TIME);
 	GPIO_PinWrite( PORT_LED_CLOCK, PIN_LED_CLOCK, 0 );
+	delay_cycles(CLOCK_DELAY_TIME);
 }
 
 void lcd_latch( void )
 {
+	delay_cycles( LATCH_DELAY_TIME );
 	GPIO_PinWrite( PORT_LED_LATCH, PIN_LED_LATCH, 1 );
+	delay_cycles(LATCH_DELAY_TIME);
 	GPIO_PinWrite( PORT_LED_LATCH, PIN_LED_LATCH, 0 );
+	delay_cycles(LATCH_DELAY_TIME);
 }
 
 /*******************************************************
-Функция		: Обновляет дисплей в соответствии с 
-				установленными значениями
+Функция		: Обновляет дисплей в соответствии с установленными значениями
 Параметр 1	: нет
 Возвр. знач.: нет
 ********************************************************/
 void LcdDig_refresh( bool current_blinking_on )
 {
-	uint32_t shift_reg_value = 0;
-	uint32_t dig_value;
+	uint8_t dig;
+	uint32_t shreg;
 	
-	// подготавливаем значение для сдвиговых регистров
-	for( int i=0; i<4; i++ )
-	{
-		dig_value = 0;
-		
-		if( ( g_LedDig[i].isOn && !g_LedDig[i].isBlinking ) || ( g_LedDig[i].isOn && g_LedDig[i].isBlinking && current_blinking_on ) )
-		{
-			// отображаем содержимое этой цифры
-			dig_value = DIGIT[g_LedDig[i].value];
-		}
-		else
-		{
-			// гасим эту цифру
-			dig_value = 0;
-		}
-		
-		shift_reg_value |= dig_value << (i*8);
-	}
+	if( !g_LedDig[3].isOn || (g_LedDig[3].isBlinking && !current_blinking_on) )
+		dig = 0;
+	else
+		dig = DIGIT[g_LedDig[3].value];
+	if( g_LedDig[3].isPoint ) dig |= 0x80;
+	shreg = dig << 24;
+	
+	if( !g_LedDig[2].isOn || (g_LedDig[2].isBlinking && !current_blinking_on) )
+		dig = 0;
+	else
+		dig = DIGIT[g_LedDig[2].value];
+	if( g_LedDig[2].isPoint ) dig |= 0x80;
+	shreg |= dig << 16;
+
+	if( !g_LedDig[1].isOn || (g_LedDig[1].isBlinking && !current_blinking_on) )
+		dig = 0;
+	else
+		dig = DIGIT[g_LedDig[1].value];
+	if( g_LedDig[1].isPoint ) dig |= 0x80;
+	shreg |= dig << 8;
+
+	if( !g_LedDig[0].isOn || (g_LedDig[0].isBlinking && !current_blinking_on) )
+		dig = 0;
+	else
+		dig = DIGIT[g_LedDig[0].value];
+	if( g_LedDig[0].isPoint ) dig |= 0x80;
+	shreg |= dig;
 	
 	// загружаем в сдвиговые регистры полученное значение
-	for( int n=0; n<32; n++ )
+	for( int i=31; i>=0; i-- )
 	{
-		GPIO_PinWrite( PORT_LED_SERIAL, PIN_LED_SERIAL, GETBIT( shift_reg_value, n ) );
+		GPIO_PinWrite( PORT_LED_SERIAL, PIN_LED_SERIAL, GETBIT( shreg, i ) );
 		lcd_clock();
 	}
-
+	GPIO_PinWrite( PORT_LED_SERIAL, PIN_LED_SERIAL, 0 );
 	lcd_latch();
+}
+
+void LcdDig_DispOff( void )
+{
+	for( int i=0; i<4; i++ )
+		g_LedDig[0].isOn = false;
+	LcdDig_refresh(false);
+}
+
+void LcdDig_ShowBegin( void )
+{
+	LcdDig_DispOff();
+	vTaskDelay(500);
+	
+	TLedDig tdig;
+	tdig.isPoint = true;
+	tdig.isBlinking = false;
+	tdig.isOn = true;
+
+	tdig.value = 10;
+	tdig.isPoint = false;
+	for( int i=0; i<4; i++ )
+	{
+		LcdDig_SetDigit( i, &tdig );
+	}
+	LcdDig_refresh(true);
+	vTaskDelay(500);
+
+	for( int dig = 9; dig >= 0; dig-- )
+	{
+		tdig.value = dig;
+		tdig.isPoint = true;
+		for( int i=0; i<4; i++ )
+		{
+			LcdDig_SetDigit( i, &tdig );
+		}
+		LcdDig_refresh(true);
+		vTaskDelay(250);
+	}
+	tdig.value = 10;
+	tdig.isPoint = false;
+	for( int i=0; i<4; i++ )
+	{
+		LcdDig_SetDigit( i, &tdig );
+	}
+	LcdDig_refresh(true);
+	vTaskDelay(500);
 }
 
 /*******************************************************
@@ -122,24 +195,7 @@ void Thread_Leds_Dig( void *pvParameters )
 	bool current_blinking_on = true;
 	
 	LcdDig_init();
-	
-	TLedDig dig;
-	dig.value = 8;
-	dig.isPoint = true;
-	dig.isBlinking = false;
-	dig.isOn = true;
-	
-	for( int i=0; i<4; i++ )
-		LcdDig_SetDigit( i, &dig );
-	LcdDig_refresh(true);
-	vTaskDelay( 500 );
-	
-	dig.value = 11;
-	dig.isPoint = false;
-	for( int i=0; i<4; i++ )
-		LcdDig_SetDigit( i, &dig );
-	LcdDig_refresh(true);
-	vTaskDelay( 500 );
+	LcdDig_ShowBegin();
 	
 	for(;;)
 	{
@@ -150,17 +206,17 @@ void Thread_Leds_Dig( void *pvParameters )
 	}
 }
 
-void LcdDig_PrintPH( float valuePH, ELcdSide side )
+void LcdDig_PrintPH( float valuePH, ELcdSide side, bool isBlink )
 {
 	TLedDig ledDig;
 	int startIndex = side == SideLEFT ? 0 : 2;
 	
 	if( valuePH < 0 )
 	{
-		ledDig.isBlinking = true;
+		ledDig.isBlinking = false;
 		ledDig.isOn = true;
 		ledDig.isPoint = false;
-		ledDig.value = 11;
+		ledDig.value = 10;
 		LcdDig_SetDigit( startIndex, &ledDig );
 		LcdDig_SetDigit( startIndex+1, &ledDig );
 	}
@@ -170,9 +226,9 @@ void LcdDig_PrintPH( float valuePH, ELcdSide side )
 			valuePH = 9.9;
 		
 		int beforePoint = valuePH;
-		int afterPoint = ((float)(valuePH - beforePoint)) * 10.0;
+		int afterPoint = roundf( ((float)(valuePH - beforePoint)) * 10.0 );
 		
-		ledDig.isBlinking = false;
+		ledDig.isBlinking = isBlink;
 		ledDig.isOn = true;
 		ledDig.isPoint = true;
 		ledDig.value = beforePoint;

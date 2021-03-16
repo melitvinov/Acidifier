@@ -22,6 +22,7 @@
 //--- CONSTANTS ------------------
 
 //--- GLOBAL VARIABLES -----------
+int g_I;
 
 //--- EXTERN ---------------------
 //extern TPacketBuffer OneMbusMessage;
@@ -39,8 +40,10 @@ void USART1_IRQHandler(void)
 	if( USART1->SR & USART_IT_RXNE ) //прерывание по приему данных
 	{
 		if ((USART1->SR & (USART_FLAG_NE|USART_FLAG_FE|USART_FLAG_PE)) == 0) //проверяем нет ли ошибок
-		{    	
-			On_Usart_ReceiveChar( (char) (USART_ReceiveData(USART1)& 0xFF) ); //считываем данные в буфер );
+		{
+			uint16_t data = USART_ReceiveData(USART1);
+			
+			On_Usart_ReceiveChar( data & 0xFF); //считываем данные в буфер
 		}
 		else
 		{
@@ -68,7 +71,7 @@ void Rs485_Init(void)
 	// Инициализация USART1
 	
 	RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
-	USART1->BRR = 0x341;		// Baudrate for 9600 on 8Mhz
+	USART1->BRR = USART_BRR_9600;		// Baudrate for 9600 on 8Mhz (833)
 	USART1->CR1  |= USART_CR1_UE | USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE; // USART1 ON, TX ON, RX ON, RXNE Int ON
 
 	RCC->APB2ENR  	|= RCC_APB2ENR_IOPAEN | RCC_APB2ENR_AFIOEN; 	// GPIOA Clock ON. Alter function clock ON
@@ -93,6 +96,7 @@ void Rs485_Init(void)
 void prvRs485_ToWrite(void)
 {
 	GPIO_PinWrite( PORT_RS485_RW, OUT_RS485_RW, 1 );
+	vTaskDelay(DELAY_BEFORE_SEND);
 }
 
 /*******************************************************
@@ -102,6 +106,7 @@ void prvRs485_ToWrite(void)
 ********************************************************/
 void prvRs485_ToRead(void)
 {
+	vTaskDelay(DELAY_AFTER_SEND);
 	GPIO_PinWrite( PORT_RS485_RW, OUT_RS485_RW, 0 );
 }
 	
@@ -112,10 +117,11 @@ void prvRs485_ToRead(void)
 ********************************************************/
 void prvUsart1_Send( char chr )
 {
-//	while(!(USART1->SR & USART_SR_TC)) {}
 	while(!(USART1->SR & USART_SR_TXE)) {}
-	
+
 	USART1->DR = chr;
+
+	while(!(USART1->SR & USART_SR_TXE)) {}
 }
 
 /*******************************************************
@@ -124,18 +130,18 @@ void prvUsart1_Send( char chr )
 Параметр 2	: длина буфера в символах
 Возвр. знач.: нет
 ********************************************************/
-void RS485_SendBuf( const char * pBuf, uint8_t count )
+void RS485_SendBuf( TPacketBuffer * buffer )
 {
-	prvRs485_ToWrite();
-	vTaskDelay(DELAY_BEFORE_SEND);
+	if( !buffer )
+		return;
 	
-	for( int i=0; i<count; i++ )
+	prvRs485_ToWrite();
+	
+	for( g_I=0; g_I<buffer->msgLen; g_I++ )
 	{
-		prvUsart1_Send( pBuf[i] );
+		prvUsart1_Send( buffer->msgData[g_I] );
 	}
 
-	while(!(USART1->SR & USART_SR_TC)) {}
-//	vTaskDelay(DELAY_AFTER_SEND);
 	prvRs485_ToRead();
 }
 

@@ -21,6 +21,9 @@
 // --- TYPES ---------------------
 
 //--- CONSTANTS ------------------
+const uint16_t DEFAULT_SETUP_PH = 50;
+const float MIN_VALUE_SETUP_PH = 20;
+const float MAX_VALUE_SETUP_PH = 100;
 
 //--- GLOBAL VARIABLES -----------
 static uint8_t g_DeviceAddr = 0;	// текущий адрес устройства на шине RS-485
@@ -195,6 +198,9 @@ void Thread_Buttons( void *pvParameters )
 			}
 		}
 		
+		isBtnMinusPressedPrev = isBtnMinusPressedNow;
+		isBtnPlusPressedPrev = isBtnPlusPressedNow;
+		
 		vTaskDelay(TIME_MS);
 	}
 }
@@ -225,7 +231,7 @@ int main(void)
 
 	xTaskCreate( AInp_Thread, (const char*)"ANALOG", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
-	xTaskCreate( MBUS_Thread, (const char*)"Modbus", 2048,	( void * ) NULL, ( tskIDLE_PRIORITY + 2 ), NULL);
+	xTaskCreate( MBUS_Thread, (const char*)"Modbus", 0x1000,	( void * ) NULL, ( tskIDLE_PRIORITY + 2 ), NULL);
 
 	xTaskCreate( Thread_Leds_Dig, (const char*)"LedsDig", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 	
@@ -240,14 +246,56 @@ int main(void)
 }
 
 /*******************************************************
+	Запись нового значения PH в EEPROM
+********************************************************/
+bool WriteSetupPhValue( uint16_t idx, uint16_t val )
+{
+	if(( val < MIN_VALUE_SETUP_PH ) || ( val > MAX_VALUE_SETUP_PH ))
+		return false;
+	
+	if( FM24_WriteBytes( EEADR_SETUP_PH, (uint8_t*) &val, sizeof( uint16_t ) ) )
+	{
+		// запоминаем в глобальной переменной
+		g_Setup_PH = val;
+		g_Setup_PH /= 10.0;
+		
+		return true;
+	}
+	return false;
+
+}
+/*******************************************************
+	Чтение значения задания PH из EEPROM
+********************************************************/
+int ReadSetupPhValue( uint16_t idx )
+{
+	uint16_t uiValue;
+	
+	if( !FM24_ReadBytes( EEADR_SETUP_PH, (uint8_t*) &uiValue, sizeof( uint16_t ) ) )
+		return -1;
+	
+	if(( uiValue < MIN_VALUE_SETUP_PH ) || ( uiValue > MAX_VALUE_SETUP_PH ))
+	{
+		// Значение установленного PH лежит вне рабочего диапазона
+		// устанавливаем значение по умолчанию
+		uiValue = DEFAULT_SETUP_PH;
+		WriteSetupPhValue( 0, uiValue );
+	}
+
+	g_Setup_PH = uiValue;
+	g_Setup_PH /= 10.0;
+	return uiValue;
+}
+
+/*******************************************************
 	Установка нового значения PH
 ********************************************************/
-void SetupPhValue( float value )
+bool SetupPhValue( float value )
 {
-	// тут надо сохранить в EEPROM новое значение PH
-	
-	// запоминаем в глобальной переменной
-	g_Setup_PH = value;
+	// тут надо применить новое значение заданного PH
+	value *= 10.0;
+	uint16_t uiValue  = roundf( value );
+	return WriteSetupPhValue( 0, uiValue );
 }
 
 /*******************************************************
@@ -260,11 +308,20 @@ void Thread_WORK( void *pvParameters )
 	float ph1, ph2, f_tar;
 	
 	g_Status = 0;
-	
-	vTaskDelay(1000);
 
+	ReadSetupPhValue(0);
 	SwitchWorkMode( Mode_RegulatorPh );
 	
+	for( int i=0; i<20; i++ )
+	{
+		Led_On( LED_SYS );
+		vTaskDelay(100);
+		Led_Off( LED_SYS );
+		vTaskDelay(100);
+	}
+	
+	//vTaskDelay(2000);
+
 	for(;;)
 	{
 		vTaskDelay(50);
@@ -301,8 +358,8 @@ void Thread_WORK( void *pvParameters )
 				
 				ph1 = AInp_GetFloatSensorPh(0);
 				ph2 = AInp_GetFloatSensorPh(1);
-				LcdDig_PrintPH( ph1, SideLEFT );
-				LcdDig_PrintPH( ph2, SideRIGHT );
+				LcdDig_PrintPH( ph1, SideLEFT, false );
+				LcdDig_PrintPH( ph2, SideRIGHT, false );
 				
 				if( g_isDblBtnPressed )
 				{
@@ -337,9 +394,9 @@ void Thread_WORK( void *pvParameters )
 					Led_On( LED_TAR_P2 );
 					f_tar = AInp_ReadPhTar1(1);
 				}
-				f_tar /= 100.0;
-				LcdDig_PrintPH( f_tar, SideLEFT );
-				LcdDig_PrintPH( f_tar, SideRIGHT );
+				f_tar /= 10.0;
+				LcdDig_PrintPH( f_tar, SideLEFT, false );
+				LcdDig_PrintPH( f_tar, SideRIGHT, false );
 				
 				if( g_isDblBtnPressed )
 				{

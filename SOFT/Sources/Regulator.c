@@ -32,10 +32,12 @@ extern float g_Setup_PH;					// заданное пользователем значение PH
 ********************************************************/
 void Reg_Init(void)
 {
+	GPIO_PinRemapConfig( GPIO_Remap_SWJ_JTAGDisable, ENABLE );
+	
 	for( int i=0; i<2; i++ )
 	{
 		// Перевод вывода для светодиода на выход с открытым коллектором
-		GPIO_PinConfigure( Relay[i].GPIOx, Relay[i].pin, GPIO_OUT_OPENDRAIN, GPIO_MODE_OUT2MHZ );
+		GPIO_PinConfigure( Relay[i].GPIOx, Relay[i].pin, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
 		
 		// Отключение светодиода
 		GPIO_PinWrite( Relay[i].GPIOx, Relay[i].pin, REL_OFF );
@@ -175,8 +177,12 @@ void Thread_Regulator( void *pvParameters )
 		{
 			isAlarmSensPh = false;
 		}
-		LcdDig_PrintPH( g_Sensor_PH, SideLEFT );
-		LcdDig_PrintPH( g_Setup_PH, SideRIGHT );
+		if( isAlarmOutOfWater )
+			LcdDig_PrintPH( -1, SideLEFT, false );
+		else
+			LcdDig_PrintPH( g_Sensor_PH, SideLEFT, isAlarmSensPh );
+
+		LcdDig_PrintPH( g_Setup_PH, SideRIGHT, false );
 		
 		if( !isAlarmOutOfWater && !isAlarmSensPh )
 		{
