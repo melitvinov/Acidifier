@@ -43,4 +43,12 @@ void Reg_RelayAllOff(void);
 
 void Thread_Regulator( void *pvParameters );
 
+int Reg_ReadCoefficient( uint16_t idx );
+bool Reg_WriteCoefficient( uint16_t idx, uint16_t val );
+
+int Reg_Read_MAX_OUT_OF_WATER_SEC( uint16_t idx );
+int Reg_Read_MAX_TIME_ERROR_PH_SEC( uint16_t idx );
+bool Reg_Write_MAX_OUT_OF_WATER_SEC( uint16_t idx, uint16_t val );
+bool Reg_Write_MAX_TIME_ERROR_PH_SEC( uint16_t idx, uint16_t val );
+
 #endif

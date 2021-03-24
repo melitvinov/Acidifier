@@ -25,8 +25,8 @@ uint8_t DIGIT[] = {
 	0x40,	// '-'
 };
 
-const int CLOCK_DELAY_TIME = 200;
-const int LATCH_DELAY_TIME = 200;
+const int CLOCK_DELAY_TIME = 5;
+const int LATCH_DELAY_TIME = 5;
 
 //--- GLOBAL VARIABLES -----------
 
@@ -63,9 +63,9 @@ void LcdDig_SetDigit( uint8_t idx, TLedDig * value )
 void LcdDig_init(void)
 {
 	// Перевод выводов для светодиода на выход
-	GPIO_PinConfigure( PORT_LED_CLOCK, PIN_LED_CLOCK, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
-	GPIO_PinConfigure( PORT_LED_LATCH, PIN_LED_LATCH, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
-	GPIO_PinConfigure( PORT_LED_SERIAL, PIN_LED_SERIAL, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
+	GPIO_PinConfigure( PORT_LED_CLOCK, PIN_LED_CLOCK, GPIO_OUT_OPENDRAIN, GPIO_MODE_OUT2MHZ );
+	GPIO_PinConfigure( PORT_LED_LATCH, PIN_LED_LATCH, GPIO_OUT_OPENDRAIN, GPIO_MODE_OUT2MHZ );
+	GPIO_PinConfigure( PORT_LED_SERIAL, PIN_LED_SERIAL, GPIO_OUT_OPENDRAIN, GPIO_MODE_OUT2MHZ );
 
 	GPIO_PinWrite( PORT_LED_CLOCK, PIN_LED_CLOCK, 0 );
 	GPIO_PinWrite( PORT_LED_LATCH, PIN_LED_LATCH, 0 );
@@ -100,42 +100,58 @@ void LcdDig_refresh( bool current_blinking_on )
 	uint8_t dig;
 	uint32_t shreg;
 	
+	vPortEnterCritical();
+	
 	if( !g_LedDig[3].isOn || (g_LedDig[3].isBlinking && !current_blinking_on) )
 		dig = 0;
 	else
+	{
 		dig = DIGIT[g_LedDig[3].value];
-	if( g_LedDig[3].isPoint ) dig |= 0x80;
+		if( g_LedDig[3].isPoint ) dig |= 0x80;
+	}
 	shreg = dig << 24;
 	
 	if( !g_LedDig[2].isOn || (g_LedDig[2].isBlinking && !current_blinking_on) )
 		dig = 0;
 	else
+	{
 		dig = DIGIT[g_LedDig[2].value];
-	if( g_LedDig[2].isPoint ) dig |= 0x80;
+		if( g_LedDig[2].isPoint ) dig |= 0x80;
+	}
 	shreg |= dig << 16;
 
 	if( !g_LedDig[1].isOn || (g_LedDig[1].isBlinking && !current_blinking_on) )
 		dig = 0;
 	else
+	{
 		dig = DIGIT[g_LedDig[1].value];
-	if( g_LedDig[1].isPoint ) dig |= 0x80;
+		if( g_LedDig[1].isPoint ) dig |= 0x80;
+	}
 	shreg |= dig << 8;
 
 	if( !g_LedDig[0].isOn || (g_LedDig[0].isBlinking && !current_blinking_on) )
 		dig = 0;
 	else
+	{
 		dig = DIGIT[g_LedDig[0].value];
-	if( g_LedDig[0].isPoint ) dig |= 0x80;
+		if( g_LedDig[0].isPoint ) dig |= 0x80;
+	}
 	shreg |= dig;
 	
 	// загружаем в сдвиговые регистры полученное значение
 	for( int i=31; i>=0; i-- )
 	{
 		GPIO_PinWrite( PORT_LED_SERIAL, PIN_LED_SERIAL, GETBIT( shreg, i ) );
+		//vTaskDelay(1);
 		lcd_clock();
+		//lcd_latch();
 	}
 	GPIO_PinWrite( PORT_LED_SERIAL, PIN_LED_SERIAL, 0 );
+	delay_cycles(100);
 	lcd_latch();
+	
+	vPortExitCritical();
+	
 }
 
 void LcdDig_DispOff( void )
@@ -240,18 +256,30 @@ void LcdDig_PrintPH( float valuePH, ELcdSide side, bool isBlink )
 	}
 }
 
-void LcdDig_DispBlinkOff( void )
+void LcdDig_DispBlinkOff( uint8_t side )
 {
-	for( int i=0; i<4; i++ )
-	{
-		g_LedDig[i].isBlinking = false;
-	}
+	if( side & SideLEFT )
+		for( int i=0; i<2; i++ )
+		{
+			g_LedDig[i].isBlinking = false;
+		}
+	if( side & SideRIGHT )
+		for( int i=2; i<4; i++ )
+		{
+			g_LedDig[i].isBlinking = false;
+		}
 }
 
-void LcdDig_DispBlinkOn( void )
+void LcdDig_DispBlinkOn( uint8_t side )
 {
-	for( int i=0; i<4; i++ )
-	{
-		g_LedDig[i].isBlinking = true;
-	}
+	if( side & SideLEFT )
+		for( int i=0; i<2; i++ )
+		{
+			g_LedDig[i].isBlinking = true;
+		}
+	if( side & SideRIGHT )
+		for( int i=2; i<4; i++ )
+		{
+			g_LedDig[i].isBlinking = true;
+		}
 }

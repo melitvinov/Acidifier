@@ -13,6 +13,7 @@
 
 #include "FM24V02.h"
 #include "AnaInputs.h"
+#include "Regulator.h"
 
 // --- DEFINES -------------------
 
@@ -23,7 +24,7 @@
 // описательные регистры
 const uint16_t gDescRegs[] = {
 	0xAAAA,	// vendor_id
-	0x1111, // product_id
+	0x0115, // product_id
 	0x0100,	// firmware_version
 	0x0000,	// firmware_git_hash_0
 	0x0000,	// firmware_git_hash_1
@@ -38,8 +39,8 @@ TRegEntry * get_regentry_by_regaddr( uint16_t regaddr );
 int readDescReg( uint16_t idx );
 int readAddIn( uint16_t idx );
 bool writeAddIn( uint16_t idx, uint16_t val );
-int readStatus( uint16_t idx );
-bool writeStatus( uint16_t idx, uint16_t val );
+//int readStatus( uint16_t idx );
+//bool writeStatus( uint16_t idx, uint16_t val );
 
 //--- GLOBAL VARIABLES -----------
 
@@ -83,7 +84,7 @@ TRegEntry RegEntries[] =
 	{.addr=58, .idx = 11, .read = readAddIn, .write=writeAddIn, },
 	{.addr=59, .idx = 12, .read = readAddIn, .write=writeAddIn, },
 
-	{.addr=START_REG_VALUES-1, .idx = 0, .read = readStatus, .write=writeStatus, },
+//	{.addr=START_REG_VALUES-1, .idx = 0, .read = readStatus, .write=writeStatus, },
 
 	{.addr=START_REG_VALUES+0, .idx = 0, .read = AInp_ReadAdcValue, .write=0 },
 	{.addr=START_REG_VALUES+1, .idx = 1, .read = AInp_ReadAdcValue, .write=0 },
@@ -102,7 +103,14 @@ TRegEntry RegEntries[] =
 	{.addr=START_REG_TAR_POINT+6, .idx = 1, .read = AInp_ReadAdcTar2, .write=AInp_WriteAdcTar2 },
 	{.addr=START_REG_TAR_POINT+7, .idx = 1, .read = AInp_ReadPhTar2, .write=AInp_WritePhTar2 },
 
-	{.addr=START_REG_VALUES+13, .idx = 0, .read = ReadWorkMode, .write=0 },
+	{.addr=START_REG_COEFFICIENT+0, .idx = 0, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
+	{.addr=START_REG_COEFFICIENT+1, .idx = 1, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
+	{.addr=START_REG_COEFFICIENT+2, .idx = 2, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
+	
+	{.addr=START_REG_TIME_DEFINE+0, .idx = 0, .read = Reg_Read_MAX_OUT_OF_WATER_SEC, .write=Reg_Write_MAX_OUT_OF_WATER_SEC },
+	{.addr=START_REG_TIME_DEFINE+1, .idx = 0, .read = Reg_Read_MAX_TIME_ERROR_PH_SEC, .write=Reg_Write_MAX_TIME_ERROR_PH_SEC },
+	
+{.addr=START_REG_VALUES+13, .idx = 0, .read = ReadWorkMode, .write=0 },
 };
 
 //--- FUNCTIONS ------------------
@@ -124,16 +132,16 @@ bool writeAddIn( uint16_t idx, uint16_t val )
 	return true;
 }
 
-int readStatus( uint16_t idx )
-{
-	return g_Status;
-}
+//int readStatus( uint16_t idx )
+//{
+//	return g_Status;
+//}
 
-bool writeStatus( uint16_t idx, uint16_t val )
-{
-	g_Status = val;
-	return true;
-}
+//bool writeStatus( uint16_t idx, uint16_t val )
+//{
+//	g_Status = val;
+//	return true;
+//}
 
 /*******************************************************
 Функция		: Пытается прочитать значение указанного регистра

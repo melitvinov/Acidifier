@@ -122,7 +122,13 @@
 /*================================================================
 	Адреса в EEPROM для переменных
 ==================================================================*/
-#define EEADR_SETUP_PH			100
+#define EEADR_SETUP_PH				100
+#define EEADR_COEF_PROP				102
+#define EEADR_COEF_INTEG			104
+#define EEADR_COEF_DIFF				106
+#define EEADR_MAX_OUT_OF_WATER_SEC	108
+#define EEADR_MAX_TIME_ERROR_PH_SEC	110
+
 #define EEADR_TAR_PH1_P1_ADC	200
 
 /*================================================================
@@ -131,8 +137,9 @@
 typedef enum _work_modes
 {
 	Mode_RegulatorPh = 1,
-	Mode_DisplaySensorsPh,
-	Mode_Calibrating
+	Mode_Calibrating_PH1,
+	Mode_Calibrating_PH2,
+//	Mode_AlarmStop
 } EWorkMode;
 
 #endif

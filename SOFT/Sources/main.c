@@ -26,10 +26,13 @@ const float MIN_VALUE_SETUP_PH = 20;
 const float MAX_VALUE_SETUP_PH = 100;
 
 //--- GLOBAL VARIABLES -----------
-static uint8_t g_DeviceAddr = 0;	// текущий адрес устройства на шине RS-485
-uint16_t g_Status;					// текущий статус устройства (0-была перезагрузка)
+uint8_t g_DeviceAddr = 0;	// текущий адрес устройства на шине RS-485
+
 EWorkMode g_WorkMode;				// текущий режим работы / отображени€
-int g_indxCalibrPointPh;			// текущий индекс калибровочной точки Ph
+bool g_isNoWater = false;
+bool g_isErrRegulator = false;
+bool g_isErrTimeoutSetupPh = false;
+bool g_isErrSensors = false;
 
 float g_Sensor_PH;					// текущее значение PH с датчиков
 float g_Setup_PH;					// заданное пользователем значение PH
@@ -83,29 +86,28 @@ void CheckAddrChange( void *pvParameters )
 /*******************************************************
 	‘ункци€	переключает режим работы
 ********************************************************/
-void SwitchWorkMode( EWorkMode newWorkMode )
-{
-	g_WorkMode = newWorkMode;
-	
-	Leds_OffAll();
-	
-	switch( g_WorkMode )
-	{
-		case Mode_RegulatorPh:
-			break;
-			
-		case Mode_DisplaySensorsPh:
-			Reg_RelayAllOff();
-			Led_On( LED_VIEW );
-			break;
-		
-		case Mode_Calibrating:
-			Reg_RelayAllOff();
-			Led_On( LED_TAR_P1 );
-			g_indxCalibrPointPh = 0;
-			break;
-	}
-}
+//void SwitchWorkMode( EWorkMode newWorkMode )
+//{
+//	g_WorkMode = newWorkMode;
+//	
+//	Leds_OffAll();
+//	
+//	switch( g_WorkMode )
+//	{
+//		case Mode_RegulatorPh:
+//			break;
+//			
+//		case Mode_Calibrating_PH1:
+//			Reg_RelayAllOff();
+//			Led_On( LED_TAR_P1 );
+//			break;
+//		
+//		case Mode_Calibrating_PH2:
+//			Reg_RelayAllOff();
+//			Led_On( LED_TAR_P2 );
+//			break;
+//	}
+//}
 
 bool _isBtnPlusPressed( void )
 {
@@ -135,6 +137,7 @@ void Thread_Buttons( void *pvParameters )
 	int msBtnMinusPressed = 0;
 	bool skipNextUpPlus = false;
 	bool skipNextUpMinus = false;
+	bool skipDblButtons = false;
 	
 	GPIO_PinConfigure( PORT_BTN_PLUS, PIN_BTN_PLUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
 	GPIO_PinConfigure( PORT_BTN_MINUS, PIN_BTN_MINUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
@@ -153,6 +156,11 @@ void Thread_Buttons( void *pvParameters )
 					if( msBtnPlusPressed < TIME_MAXMS_BTNDOWN )
 					g_isBtnPlusClick = true;
 				}
+				else
+				{
+					// при отпускании кнопки разблокируем анализ нажати€ двух кнопок
+					skipDblButtons = false;
+				}
 				skipNextUpPlus = false;
 			}
 			msBtnPlusPressed = 0;
@@ -162,11 +170,12 @@ void Thread_Buttons( void *pvParameters )
 			if( isBtnPlusPressedPrev ) 
 			{
 				msBtnPlusPressed += TIME_MS;
-				if(( msBtnPlusPressed > TIME_DBLBTN ) && ( msBtnMinusPressed > TIME_DBLBTN ))
+				if(( msBtnPlusPressed > TIME_DBLBTN ) && ( msBtnMinusPressed > TIME_DBLBTN ) && !skipDblButtons )
 				{
 					g_isDblBtnPressed = true;
 					skipNextUpPlus = true;
 					skipNextUpMinus = true;
+					skipDblButtons = true;
 				}
 			}
 		}
@@ -180,6 +189,11 @@ void Thread_Buttons( void *pvParameters )
 					if( msBtnMinusPressed < TIME_MAXMS_BTNDOWN )
 					g_isBtnMinusClick = true;
 				}
+				else
+				{
+					// при отпускании кнопки разблокируем анализ нажати€ двух кнопок
+					skipDblButtons = false;
+				}
 				skipNextUpMinus = false;
 			}
 			msBtnMinusPressed = 0;
@@ -189,11 +203,12 @@ void Thread_Buttons( void *pvParameters )
 			if( isBtnMinusPressedPrev ) 
 			{
 				msBtnMinusPressed += TIME_MS;
-				if(( msBtnPlusPressed > TIME_DBLBTN ) && ( msBtnMinusPressed > TIME_DBLBTN ))
+				if(( msBtnPlusPressed > TIME_DBLBTN ) && ( msBtnMinusPressed > TIME_DBLBTN ) && !skipDblButtons )
 				{
 					g_isDblBtnPressed = true;
 					skipNextUpPlus = true;
 					skipNextUpMinus = true;
+					skipDblButtons = true;
 				}
 			}
 		}
@@ -305,12 +320,14 @@ bool SetupPhValue( float value )
 ********************************************************/
 void Thread_WORK( void *pvParameters )
 {
-	float ph1, ph2, f_tar;
+	float ph1, ph2;
 	
-	g_Status = 0;
+	//g_Status = 0;
 
 	ReadSetupPhValue(0);
-	SwitchWorkMode( Mode_RegulatorPh );
+	//SwitchWorkMode( Mode_RegulatorPh );
+	
+	g_WorkMode = Mode_RegulatorPh;
 	
 	for( int i=0; i<20; i++ )
 	{
@@ -320,22 +337,43 @@ void Thread_WORK( void *pvParameters )
 		vTaskDelay(100);
 	}
 	
-	//vTaskDelay(2000);
+	vTaskDelay(2000);
 
 	for(;;)
 	{
 		vTaskDelay(50);
 		
+		bool stopWork = g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh || g_isNoWater;
+		g_isErrRegulator ? Led_On( LED_ERR_REGULATOR ) : Led_Off( LED_ERR_REGULATOR );
+		g_isErrSensors ? Led_On( LED_ERR_SENSORS ) : Led_Off( LED_ERR_SENSORS );
+		g_isErrTimeoutSetupPh ? Led_On( LED_ERR_SETUP_PH_TIMEOUT ) : Led_Off( LED_ERR_SETUP_PH_TIMEOUT );
+		g_isNoWater ? Led_On( LED_NO_WATER ) : Led_Off( LED_NO_WATER );
+		
 		switch( (int)g_WorkMode )
 		{
 			case Mode_RegulatorPh:
+
+				Led_Off( LED_TAR_P1 );
+				Led_Off( LED_TAR_P2 );
 				
+				if( stopWork )
+				{
+					Led_Off( LED_WORK_OK );
+					LcdDig_DispBlinkOn( SideLEFT );
+					LcdDig_DispBlinkOff( SideRIGHT );
+				}
+				else
+				{
+					Led_On( LED_WORK_OK );
+					LcdDig_DispBlinkOff( SideLEFT );
+					LcdDig_DispBlinkOff( SideRIGHT );
+				}
 				if( g_isDblBtnPressed )
 				{
 					g_isDblBtnPressed = false;
 					g_isBtnPlusClick = false;
 					g_isBtnMinusClick = false;
-					SwitchWorkMode( Mode_DisplaySensorsPh );
+					g_WorkMode = Mode_Calibrating_PH1;
 				}
 				else if( g_isBtnPlusClick )
 				{
@@ -351,91 +389,91 @@ void Thread_WORK( void *pvParameters )
 					if( g_Setup_PH - 0.1 > 0 )
 						SetupPhValue( g_Setup_PH - 0.1 );
 				}
-				
 				break;
 			
-			case Mode_DisplaySensorsPh:
+			case Mode_Calibrating_PH1:
 				
+				Led_Off( LED_WORK_OK );
+				Led_On( LED_TAR_P1 );
+				Led_Off( LED_TAR_P2 );
+
 				ph1 = AInp_GetFloatSensorPh(0);
 				ph2 = AInp_GetFloatSensorPh(1);
 				LcdDig_PrintPH( ph1, SideLEFT, false );
 				LcdDig_PrintPH( ph2, SideRIGHT, false );
-				
+			
 				if( g_isDblBtnPressed )
 				{
-					g_isDblBtnPressed = false;
-					g_isBtnPlusClick = false;
-					g_isBtnMinusClick = false;
-					SwitchWorkMode( Mode_Calibrating );
-				}
-				else if( g_isBtnPlusClick || g_isBtnMinusClick )
-				{
-					g_isDblBtnPressed = false;
-					g_isBtnPlusClick = false;
-					g_isBtnMinusClick = false;
-					SwitchWorkMode( Mode_RegulatorPh );
-				}
-			
-				break;
-			
-			case Mode_Calibrating:
-				// ќтображение значени€ калибровочного раствора
-				if( g_indxCalibrPointPh == 0 )
-				{
-					// калибруетс€ перва€ точка Ph
-					Led_On( LED_TAR_P1 );
-					Led_Off( LED_TAR_P2 );
-					f_tar = AInp_ReadPhTar1(0);
-				}
-				else
-				{
-					// калибруетс€ втора€ точка Ph
-					Led_Off( LED_TAR_P1 );
-					Led_On( LED_TAR_P2 );
-					f_tar = AInp_ReadPhTar1(1);
-				}
-				f_tar /= 10.0;
-				LcdDig_PrintPH( f_tar, SideLEFT, false );
-				LcdDig_PrintPH( f_tar, SideRIGHT, false );
-				
-				if( g_isDblBtnPressed )
-				{
-					// ѕодтверждение калибровки точки
-					// ќтображение подтверждени€
-					LcdDig_DispBlinkOn();
-					vTaskDelay( 2000 );
-					LcdDig_DispBlinkOff();
 					// сброс нажатых кнопок
 					g_isDblBtnPressed = false;
 					g_isBtnPlusClick = false;
 					g_isBtnMinusClick = false;
+					
+					// ѕодтверждение калибровки точки
+					// ќтображение подтверждени€
+					LcdDig_DispBlinkOn( SideLEFT | SideRIGHT );
+					vTaskDelay( 1500 );
+					LcdDig_DispBlinkOff( SideLEFT | SideRIGHT );
 					// запись калибровки
-					if( g_indxCalibrPointPh == 0 )
-					{
-						// перва€ точка
-						AInp_WriteAdcTar1( 0, AInp_ReadAdcValue( 0 ) );
-						g_indxCalibrPointPh = 1;
-					}
-					else
-					{
-						// втора€ точка
-						AInp_WriteAdcTar1( 1, AInp_ReadAdcValue( 1 ) );
-						SwitchWorkMode( Mode_RegulatorPh );
-					}
+					AInp_WriteAdcTar1( 0, AInp_ReadAdcValue( 0 ) );
+					AInp_WriteAdcTar1( 1, AInp_ReadAdcValue( 1 ) );
+					
+					g_WorkMode = Mode_Calibrating_PH2;
 				}
 				else if( g_isBtnPlusClick || g_isBtnMinusClick )
 				{
-					// отмена калибровки, возврат в режим работы
+					g_isBtnPlusClick = false;
+					g_isBtnMinusClick = false;
+					
+					g_WorkMode = Mode_RegulatorPh;
+				}
+			
+				break;
+				
+			case Mode_Calibrating_PH2:
+				Led_Off( LED_WORK_OK );
+				Led_On( LED_TAR_P2 );
+				Led_Off( LED_TAR_P1 );
+
+				ph1 = AInp_GetFloatSensorPh(0);
+				ph2 = AInp_GetFloatSensorPh(1);
+				LcdDig_PrintPH( ph1, SideLEFT, false );
+				LcdDig_PrintPH( ph2, SideRIGHT, false );
+			
+				if( g_isDblBtnPressed )
+				{
 					g_isDblBtnPressed = false;
 					g_isBtnPlusClick = false;
 					g_isBtnMinusClick = false;
-					SwitchWorkMode( Mode_RegulatorPh );
+					
+					// сброс нажатых кнопок
+					g_isDblBtnPressed = false;
+					g_isBtnPlusClick = false;
+					g_isBtnMinusClick = false;
+					
+					// ѕодтверждение калибровки точки
+					// ќтображение подтверждени€
+					LcdDig_DispBlinkOn( SideLEFT | SideRIGHT );
+					vTaskDelay( 1500 );
+					LcdDig_DispBlinkOff( SideLEFT | SideRIGHT );
+					// запись калибровки
+					AInp_WriteAdcTar2( 0, AInp_ReadAdcValue( 0 ) );
+					AInp_WriteAdcTar2( 1, AInp_ReadAdcValue( 1 ) );
+					
+					g_WorkMode = Mode_RegulatorPh;
+				}
+				else if( g_isBtnPlusClick || g_isBtnMinusClick )
+				{
+					g_isBtnPlusClick = false;
+					g_isBtnMinusClick = false;
+					
+					g_WorkMode = Mode_RegulatorPh;
 				}
 				
 				break;
 			
 			default:
-				SwitchWorkMode( Mode_RegulatorPh );
+				g_WorkMode = Mode_RegulatorPh;
 		}
 	}
 }

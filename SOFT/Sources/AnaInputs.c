@@ -25,8 +25,8 @@ const uint8_t ainputs[] =
 const uint8_t PH_CHANNELS_COUNT = sizeof(ainputs) / sizeof( uint8_t );
 
 // тарировочная точка по умолчанию для датчиков PH
-const TTarPoint DefaultPhTarPoint_1 = {2000, 70};
-const TTarPoint DefaultPhTarPoint_2 = {3150, 40};
+const TTarPoint DefaultPhTarPoint_1 = {3400, 40};
+const TTarPoint DefaultPhTarPoint_2 = {2000, 70};
 
 //--- GLOBAL VARIABLES -----------
 uint16_t sensorsPH_values[PH_CHANNELS_COUNT];	// в массиве хранятся вычисленные значения датчиков PH (float * 10)
@@ -94,7 +94,7 @@ bool AInp_WriteAdcTar1( uint16_t idx, uint16_t val )
 	
 	uint16_t ee_addr = idx==0 ? EEADR_TAR_PH1_P1_ADC : (EEADR_TAR_PH1_P1_ADC + sizeof(TTarTable));
 	// сохраняем в EEPROM
-	bool isWrited = FM24_WriteBytes( ee_addr, (uint8_t*) &val, 2 );
+	bool isWrited = FM24_WriteWords( ee_addr, &val, 1 );
 	
 	if( isWrited )
 	{
@@ -109,7 +109,7 @@ bool AInp_WritePhTar1( uint16_t idx, uint16_t val )
 	
 	uint16_t ee_addr = idx==0 ? EEADR_TAR_PH1_P1_ADC + 2 : (EEADR_TAR_PH1_P1_ADC + sizeof(TTarTable) + 2 );
 	// сохраняем в EEPROM
-	bool isWrited = FM24_WriteBytes( ee_addr, (uint8_t*) &val, 2 );
+	bool isWrited = FM24_WriteWords( ee_addr, &val, 1 );;
 	
 	if( isWrited )
 	{
@@ -124,7 +124,7 @@ bool AInp_WriteAdcTar2( uint16_t idx, uint16_t val )
 	
 	uint16_t ee_addr = idx==0 ? EEADR_TAR_PH1_P1_ADC + sizeof(TTarPoint) : (EEADR_TAR_PH1_P1_ADC + + sizeof(TTarTable) + sizeof(TTarPoint) );
 	// сохраняем в EEPROM
-	bool isWrited = FM24_WriteBytes( ee_addr, (uint8_t*) &val, 2 );
+	bool isWrited = FM24_WriteWords( ee_addr, &val, 1 );
 
 	if( isWrited )
 	{
@@ -139,7 +139,7 @@ bool AInp_WritePhTar2( uint16_t idx, uint16_t val )
 	
 	uint16_t ee_addr = idx==0 ? EEADR_TAR_PH1_P1_ADC + sizeof(TTarPoint) + 2 : (EEADR_TAR_PH1_P1_ADC + + sizeof(TTarTable) + sizeof(TTarPoint) + 2 );
 	// сохраняем в EEPROM
-	bool isWrited = FM24_WriteBytes( ee_addr, (uint8_t*) &val, 2 );
+	bool isWrited = FM24_WriteWords( ee_addr, &val, 1 );
 
 	if( isWrited )
 	{
