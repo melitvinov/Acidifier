@@ -40,6 +40,7 @@ float g_Setup_PH;					// заданное пользователем значение PH
 bool g_isBtnPlusClick;
 bool g_isBtnMinusClick;
 bool g_isDblBtnPressed;
+bool g_isCancelPressed;
 
 //--- IRQ ------------------------
 
@@ -203,12 +204,17 @@ void Thread_Buttons( void *pvParameters )
 			if( isBtnMinusPressedPrev ) 
 			{
 				msBtnMinusPressed += TIME_MS;
+				
 				if(( msBtnPlusPressed > TIME_DBLBTN ) && ( msBtnMinusPressed > TIME_DBLBTN ) && !skipDblButtons )
 				{
 					g_isDblBtnPressed = true;
 					skipNextUpPlus = true;
 					skipNextUpMinus = true;
 					skipDblButtons = true;
+				}
+				else if( msBtnMinusPressed > TIME_DBLBTN )
+				{	
+					g_isCancelPressed = true;
 				}
 			}
 		}
@@ -229,7 +235,7 @@ void Initialize()
 {
 	Leds_init();
 	ADRSW_init();
-	
+
 	g_DeviceAddr = 0;
 }
 
@@ -313,6 +319,33 @@ bool SetupPhValue( float value )
 	return WriteSetupPhValue( 0, uiValue );
 }
 
+// сброс срабатываний всех кнопок и сочетаний
+void clearAllButtons( void )
+{
+	g_isDblBtnPressed = false;
+	g_isBtnPlusClick = false;
+	g_isBtnMinusClick = false;
+	g_isCancelPressed = false;
+}
+
+// Сброс всех ошибок
+void clearAllErrors( void )
+{
+	g_isErrRegulator = false;
+	g_isErrTimeoutSetupPh = false;
+	g_isErrSensors = false;
+
+	// Отображение сброса ошибок
+	LcdDig_PrintPH( 8.8, SideLEFT, true );
+	LcdDig_PrintPH( 8.8, SideRIGHT, true );
+	vTaskDelay( 1500 );
+}
+
+void switchALARM( uint8_t on )
+{
+	GPIO_PinWrite( PORT_ALARM , PIN_ALARM, on );
+}
+
 /*******************************************************
 Поток		: Рабочий поток устройства
 Параметр 1	: не используется
@@ -321,11 +354,13 @@ bool SetupPhValue( float value )
 void Thread_WORK( void *pvParameters )
 {
 	float ph1, ph2;
+	bool stopWork, alarm;
 	
-	//g_Status = 0;
+	// Инициализация выхода тревоги
+	GPIO_PinConfigure( PORT_ALARM, PIN_ALARM, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
+	GPIO_PinWrite( PORT_ALARM, PIN_ALARM, 0 );
 
 	ReadSetupPhValue(0);
-	//SwitchWorkMode( Mode_RegulatorPh );
 	
 	g_WorkMode = Mode_RegulatorPh;
 	
@@ -337,17 +372,20 @@ void Thread_WORK( void *pvParameters )
 		vTaskDelay(100);
 	}
 	
-	vTaskDelay(2000);
+	//vTaskDelay(2000);
 
 	for(;;)
 	{
 		vTaskDelay(50);
 		
-		bool stopWork = g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh || g_isNoWater;
+		alarm = g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh;
+		stopWork = alarm || g_isNoWater;
 		g_isErrRegulator ? Led_On( LED_ERR_REGULATOR ) : Led_Off( LED_ERR_REGULATOR );
 		g_isErrSensors ? Led_On( LED_ERR_SENSORS ) : Led_Off( LED_ERR_SENSORS );
 		g_isErrTimeoutSetupPh ? Led_On( LED_ERR_SETUP_PH_TIMEOUT ) : Led_Off( LED_ERR_SETUP_PH_TIMEOUT );
 		g_isNoWater ? Led_On( LED_NO_WATER ) : Led_Off( LED_NO_WATER );
+		
+		switchALARM( alarm );
 		
 		switch( (int)g_WorkMode )
 		{
@@ -355,7 +393,16 @@ void Thread_WORK( void *pvParameters )
 
 				Led_Off( LED_TAR_P1 );
 				Led_Off( LED_TAR_P2 );
-				
+
+				g_Sensor_PH = AInp_GetSystemPh();
+
+				if( g_isNoWater )
+					LcdDig_PrintPH( -1, SideLEFT, false );
+				else
+					LcdDig_PrintPH( g_Sensor_PH, SideLEFT, g_isErrSensors );
+
+				LcdDig_PrintPH( g_Setup_PH, SideRIGHT, false );
+			
 				if( stopWork )
 				{
 					Led_Off( LED_WORK_OK );
@@ -370,24 +417,32 @@ void Thread_WORK( void *pvParameters )
 				}
 				if( g_isDblBtnPressed )
 				{
-					g_isDblBtnPressed = false;
-					g_isBtnPlusClick = false;
-					g_isBtnMinusClick = false;
+					// сброс нажатых кнопок
+					clearAllButtons();
 					g_WorkMode = Mode_Calibrating_PH1;
 				}
 				else if( g_isBtnPlusClick )
 				{
-					g_isBtnPlusClick = false;
+					// сброс нажатых кнопок
+					clearAllButtons();
 					
 					if( g_Setup_PH + 0.1 < 10 )
 						SetupPhValue( g_Setup_PH + 0.1 );
 				}
 				else if( g_isBtnMinusClick )
 				{
-					g_isBtnMinusClick = false;
+					// сброс нажатых кнопок
+					clearAllButtons();
 					
 					if( g_Setup_PH - 0.1 > 0 )
 						SetupPhValue( g_Setup_PH - 0.1 );
+				}
+				else if( g_isCancelPressed )
+				{
+					// сброс нажатых кнопок
+					clearAllButtons();
+
+					clearAllErrors();
 				}
 				break;
 			
@@ -404,26 +459,43 @@ void Thread_WORK( void *pvParameters )
 			
 				if( g_isDblBtnPressed )
 				{
-					// сброс нажатых кнопок
-					g_isDblBtnPressed = false;
-					g_isBtnPlusClick = false;
-					g_isBtnMinusClick = false;
-					
 					// Подтверждение калибровки точки
+
+					// сброс нажатых кнопок
+					clearAllButtons();
+					
+					// запись калибровки
+					AInp_WriteAdcTar1( 0, AInp_ReadAdcValue( 0 ) );
+					AInp_WriteAdcTar1( 1, AInp_ReadAdcValue( 1 ) );
+
+					// Вывод на дисплей обновленных значений датчиков
+					ph1 = AInp_GetFloatSensorPh(0);
+					ph2 = AInp_GetFloatSensorPh(1);
+					LcdDig_PrintPH( ph1, SideLEFT, false );
+					LcdDig_PrintPH( ph2, SideRIGHT, false );
+					vTaskDelay(100);
+
 					// Отображение подтверждения
 					LcdDig_DispBlinkOn( SideLEFT | SideRIGHT );
 					vTaskDelay( 1500 );
 					LcdDig_DispBlinkOff( SideLEFT | SideRIGHT );
-					// запись калибровки
-					AInp_WriteAdcTar1( 0, AInp_ReadAdcValue( 0 ) );
-					AInp_WriteAdcTar1( 1, AInp_ReadAdcValue( 1 ) );
 					
 					g_WorkMode = Mode_Calibrating_PH2;
 				}
-				else if( g_isBtnPlusClick || g_isBtnMinusClick )
+				else if( g_isBtnPlusClick )
 				{
-					g_isBtnPlusClick = false;
-					g_isBtnMinusClick = false;
+					// Пропуск калибровки точки
+
+					// сброс нажатых кнопок
+					clearAllButtons();
+					g_WorkMode = Mode_Calibrating_PH2;
+				}
+				else if( g_isBtnMinusClick )
+				{
+					// Отмена калибровки точки
+
+					// сброс нажатых кнопок
+					clearAllButtons();
 					
 					g_WorkMode = Mode_RegulatorPh;
 				}
@@ -442,30 +514,35 @@ void Thread_WORK( void *pvParameters )
 			
 				if( g_isDblBtnPressed )
 				{
-					g_isDblBtnPressed = false;
-					g_isBtnPlusClick = false;
-					g_isBtnMinusClick = false;
-					
-					// сброс нажатых кнопок
-					g_isDblBtnPressed = false;
-					g_isBtnPlusClick = false;
-					g_isBtnMinusClick = false;
-					
 					// Подтверждение калибровки точки
+
+					// сброс нажатых кнопок
+					clearAllButtons();
+					
+					// запись калибровки
+					AInp_WriteAdcTar2( 0, AInp_ReadAdcValue( 0 ) );
+					AInp_WriteAdcTar2( 1, AInp_ReadAdcValue( 1 ) );
+
+					// Вывод на дисплей обновленных значений датчиков
+					ph1 = AInp_GetFloatSensorPh(0);
+					ph2 = AInp_GetFloatSensorPh(1);
+					LcdDig_PrintPH( ph1, SideLEFT, false );
+					LcdDig_PrintPH( ph2, SideRIGHT, false );
+					vTaskDelay(100);
+
 					// Отображение подтверждения
 					LcdDig_DispBlinkOn( SideLEFT | SideRIGHT );
 					vTaskDelay( 1500 );
 					LcdDig_DispBlinkOff( SideLEFT | SideRIGHT );
-					// запись калибровки
-					AInp_WriteAdcTar2( 0, AInp_ReadAdcValue( 0 ) );
-					AInp_WriteAdcTar2( 1, AInp_ReadAdcValue( 1 ) );
 					
 					g_WorkMode = Mode_RegulatorPh;
 				}
 				else if( g_isBtnPlusClick || g_isBtnMinusClick )
 				{
-					g_isBtnPlusClick = false;
-					g_isBtnMinusClick = false;
+					// Отмена калибровки точки
+
+					// сброс нажатых кнопок
+					clearAllButtons();
 					
 					g_WorkMode = Mode_RegulatorPh;
 				}

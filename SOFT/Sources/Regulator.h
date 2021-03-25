@@ -25,8 +25,8 @@
 //-- Индексы реле
 enum 
 {
-	REL_PLUS = 0,
-	REL_MINUS,
+	REL_CLOSE = 0,
+	REL_OPEN,
 };
 
 typedef struct _relay_desc
@@ -50,5 +50,9 @@ int Reg_Read_MAX_OUT_OF_WATER_SEC( uint16_t idx );
 int Reg_Read_MAX_TIME_ERROR_PH_SEC( uint16_t idx );
 bool Reg_Write_MAX_OUT_OF_WATER_SEC( uint16_t idx, uint16_t val );
 bool Reg_Write_MAX_TIME_ERROR_PH_SEC( uint16_t idx, uint16_t val );
+
+int Reg_Read_FULL_MOVE_TIME_SEC( uint16_t idx );
+bool Reg_Write_FULL_MOVE_TIME_SEC( uint16_t idx, uint16_t val );
+bool Reg_IsError( void );
 
 #endif

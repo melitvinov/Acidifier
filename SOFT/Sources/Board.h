@@ -111,13 +111,35 @@
 #define PIN_SENS_WATER  11
 
 /*================================================================
-	Описание выходов управления реле
+	Описание выходов управления реле для регулятора
 ==================================================================*/
-#define PORT_REL_PLUS   GPIOB
-#define PORT_REL_MINUS  GPIOB
+#define PORT_REL_CLOSE  GPIOB
+#define PORT_REL_OPEN  	GPIOB
 
-#define PIN_REL_PLUS   	4
-#define PIN_REL_MINUS   3
+#define PIN_REL_CLOSE   4
+#define PIN_REL_OPEN   	3
+
+/*================================================================
+	Описание входов виртуальных концевиков
+==================================================================*/
+
+#define PORT_CURRENT_CLOSE  GPIOC
+#define PORT_CURRENT_OPEN  	GPIOC
+
+#define PIN_CURRENT_CLOSE   0
+#define PIN_CURRENT_OPEN   	1
+
+/*================================================================
+	Описание выходов управления насосом
+==================================================================*/
+#define PORT_PUMP  			GPIOC
+#define PIN_PUMP   			7
+
+/*================================================================
+	Описание выходов управления реле тревоги
+==================================================================*/
+#define PORT_ALARM  		GPIOC
+#define PIN_ALARM   		6
 
 /*================================================================
 	Адреса в EEPROM для переменных
@@ -128,6 +150,7 @@
 #define EEADR_COEF_DIFF				106
 #define EEADR_MAX_OUT_OF_WATER_SEC	108
 #define EEADR_MAX_TIME_ERROR_PH_SEC	110
+#define EEADR_FULL_MOVE_TIME_SEC	112
 
 #define EEADR_TAR_PH1_P1_ADC	200
 

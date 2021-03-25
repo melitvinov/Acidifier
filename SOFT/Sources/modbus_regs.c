@@ -84,33 +84,51 @@ TRegEntry RegEntries[] =
 	{.addr=58, .idx = 11, .read = readAddIn, .write=writeAddIn, },
 	{.addr=59, .idx = 12, .read = readAddIn, .write=writeAddIn, },
 
-//	{.addr=START_REG_VALUES-1, .idx = 0, .read = readStatus, .write=writeStatus, },
+	// Текущий режим работы ( 1-Регулирование, 2-калибровка Т1, 3-калибровка Т2 )
+	{.addr=START_REG_VALUES-1, .idx = 0, .read = ReadWorkMode, .write=0 },
 
+	// Значение АЦП датчика PH №1
 	{.addr=START_REG_VALUES+0, .idx = 0, .read = AInp_ReadAdcValue, .write=0 },
+	// Значение АЦП датчика PH №2
 	{.addr=START_REG_VALUES+1, .idx = 1, .read = AInp_ReadAdcValue, .write=0 },
+	// Значение датчика PH №1 ( умноженное на 10 )
 	{.addr=START_REG_VALUES+2, .idx = 0, .read = AInp_ReadPhValue, .write=0 },
+	// Значение датчика PH №2 ( умноженное на 10 )
 	{.addr=START_REG_VALUES+3, .idx = 1, .read = AInp_ReadPhValue, .write=0 },
+	// Системное значение PH ( умноженное на 10 ) 
+	//( берется с датчика PH №1. Если разбег значений датчиков 1 и 2 больше +-0.5, то -1 )
 	{.addr=START_REG_VALUES+4, .idx = 0, .read = AInp_ReadSystemPh, .write=0 },
+	// Заданное значение PH ( умноженное на 10 )
 	{.addr=START_REG_VALUES+5, .idx = 0, .read = ReadSetupPhValue, .write=WriteSetupPhValue },
 
+	// тарировочная точка 1 для датчика №1
 	{.addr=START_REG_TAR_POINT+0, .idx = 0, .read = AInp_ReadAdcTar1, .write=AInp_WriteAdcTar1 },
 	{.addr=START_REG_TAR_POINT+1, .idx = 0, .read = AInp_ReadPhTar1, .write=AInp_WritePhTar1 },
+	// тарировочная точка 2 для датчика №1
 	{.addr=START_REG_TAR_POINT+2, .idx = 0, .read = AInp_ReadAdcTar2, .write=AInp_WriteAdcTar2 },
 	{.addr=START_REG_TAR_POINT+3, .idx = 0, .read = AInp_ReadPhTar2, .write=AInp_WritePhTar2 },
 
+	// тарировочная точка 1 для датчика №2
 	{.addr=START_REG_TAR_POINT+4, .idx = 1, .read = AInp_ReadAdcTar1, .write=AInp_WriteAdcTar1 },
 	{.addr=START_REG_TAR_POINT+5, .idx = 1, .read = AInp_ReadPhTar1, .write=AInp_WritePhTar1 },
+	// тарировочная точка 2 для датчика №2
 	{.addr=START_REG_TAR_POINT+6, .idx = 1, .read = AInp_ReadAdcTar2, .write=AInp_WriteAdcTar2 },
 	{.addr=START_REG_TAR_POINT+7, .idx = 1, .read = AInp_ReadPhTar2, .write=AInp_WritePhTar2 },
 
+	// пропорциональный коэффициент 
 	{.addr=START_REG_COEFFICIENT+0, .idx = 0, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
+	// интегральный коэффициент 
 	{.addr=START_REG_COEFFICIENT+1, .idx = 1, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
+	// дифференциальный коэффициент 
 	{.addr=START_REG_COEFFICIENT+2, .idx = 2, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
 	
+	// максимальное время в секундах отсутствия воды для остановки регулятора и насоса
 	{.addr=START_REG_TIME_DEFINE+0, .idx = 0, .read = Reg_Read_MAX_OUT_OF_WATER_SEC, .write=Reg_Write_MAX_OUT_OF_WATER_SEC },
+	// максимальное время в секундах отклонения значения PH от задания PH для остановки регулятора и насоса
 	{.addr=START_REG_TIME_DEFINE+1, .idx = 0, .read = Reg_Read_MAX_TIME_ERROR_PH_SEC, .write=Reg_Write_MAX_TIME_ERROR_PH_SEC },
+	// время хода регулятора в секундах
+	{.addr=START_REG_TIME_DEFINE+2, .idx = 0, .read = Reg_Read_FULL_MOVE_TIME_SEC, .write=Reg_Write_FULL_MOVE_TIME_SEC },
 	
-{.addr=START_REG_VALUES+13, .idx = 0, .read = ReadWorkMode, .write=0 },
 };
 
 //--- FUNCTIONS ------------------

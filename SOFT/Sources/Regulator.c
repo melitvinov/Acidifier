@@ -14,13 +14,16 @@
 
 //--- CONSTANTS ------------------
 const TRelDesc Relay[] = {
-	{PORT_REL_PLUS, PIN_REL_PLUS},
-	{PORT_REL_MINUS, PIN_REL_MINUS},
+	{PORT_REL_CLOSE, PIN_REL_CLOSE},
+	{PORT_REL_OPEN, PIN_REL_OPEN},
 };
 
 const float K_INTEGRAL_DEFAULT = 0.2;
 const float K_DIFF_DEFAULT = 0.2;
 const float K_PROP_DEFAULT = 2.0;
+const uint16_t FULL_MOVE_TIME_SEC_DEFAULT = 20;
+const uint16_t MIN_FULL_MOVE_TIME_SEC = 5;		// минимальное время хода регулятора в секундах
+const uint16_t MAX_FULL_MOVE_TIME_SEC = 120;	// максимальное время хода регулятора в секундах
 
 //--- GLOBAL VARIABLES -----------
 extern float g_Sensor_PH;					// текущее значение PH с датчиков
@@ -37,6 +40,7 @@ float g_K_PROP;
 
 uint16_t MAX_OUT_OF_WATER_SEC;		// макс. длительность отсуствия воды для аварии (сек.)
 uint16_t MAX_TIME_ERROR_PH_SEC;		// макс. длительность ошибки установки PH (сек.)
+uint16_t FULL_MOVE_TIME_SEC;			// полное время хода регулятора в секундах
 
 //--- FUNCTIONS ------------------
 extern int ReadWorkMode( uint16_t idx );
@@ -58,6 +62,15 @@ void Reg_Init(void)
 		// Отключение светодиода
 		GPIO_PinWrite( Relay[i].GPIOx, Relay[i].pin, REL_OFF );
 	}
+
+	// Перевод вывода на вход с подтяжкой к VCC для токовых датчиков
+	GPIO_PinConfigure( PORT_CURRENT_CLOSE, PIN_CURRENT_CLOSE, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
+	GPIO_PinConfigure( PORT_CURRENT_OPEN, PIN_CURRENT_OPEN, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
+
+	// Перевод выводов реле насоса и тревоги на выход
+	GPIO_PinConfigure( PORT_PUMP, PIN_PUMP, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
+	// Отключение насоса и тревоги
+	GPIO_PinWrite( PORT_PUMP, PIN_PUMP, 0 );
 	
 	// Загружаем коэффициенты для расчета
 	uint16_t Koef[3];
@@ -98,19 +111,17 @@ void Reg_Init(void)
 		MAX_TIME_ERROR_PH_SEC = 90;
 		FM24_WriteWords( EEADR_MAX_TIME_ERROR_PH_SEC, &MAX_TIME_ERROR_PH_SEC, 1 );
 	}
+
+	if( !FM24_ReadWords( EEADR_FULL_MOVE_TIME_SEC, &FULL_MOVE_TIME_SEC, 1 ) || FULL_MOVE_TIME_SEC == 0 )
+	{
+		FULL_MOVE_TIME_SEC = FULL_MOVE_TIME_SEC_DEFAULT;
+		FM24_WriteWords( EEADR_FULL_MOVE_TIME_SEC, &FULL_MOVE_TIME_SEC, 1 );
+	}
 }
 
 /*******************************************************
-	Возвращает состояние датчика протока воды
+	Расчет значения PID регулятора
 ********************************************************/
-bool IsWaterOk( void )
-{
-	bool isOk;
-	isOk = ( GPIO_PinRead( PORT_SENS_WATER, PIN_SENS_WATER ) == 0 );
-	
-	return isOk;
-}
-
 float getPidValue( float errorPh, float deltaTime, float prevPh )
 {
     float pidValue = 0, integralValue, diffValue;
@@ -127,6 +138,27 @@ float getPidValue( float errorPh, float deltaTime, float prevPh )
     return pidValue;
 }
 
+/*******************************************************
+	Возвращает состояние концевика реле закрытия
+********************************************************/
+bool IsCurrent_CLOSE( void )
+{
+	bool isOk;
+	isOk = ( GPIO_PinRead( PORT_CURRENT_CLOSE, PIN_CURRENT_CLOSE ) == 0 );
+	
+	return isOk;
+}
+
+/*******************************************************
+	Возвращает состояние концевика реле закрытия
+********************************************************/
+bool IsCurrent_OPEN( void )
+{
+	bool isOk;
+	isOk = ( GPIO_PinRead( PORT_CURRENT_OPEN, PIN_CURRENT_OPEN ) == 0 );
+	
+	return isOk;
+}
 
 /*******************************************************
 	Один цикл регулирования PH
@@ -154,18 +186,36 @@ void regulator_cycle( float deltaTime )
 	
 	if( pidValue > 0.15 )
 	{
-		Reg_RelayOn( REL_PLUS );
-		Reg_RelayOff( REL_MINUS );
+		Reg_RelayOn( REL_CLOSE );
+		Reg_RelayOff( REL_OPEN );
 	}
 	else if( pidValue < -0.15 )
 	{
-		Reg_RelayOff( REL_PLUS );
-		Reg_RelayOn( REL_MINUS );
+		Reg_RelayOff( REL_CLOSE );
+		Reg_RelayOn( REL_OPEN );
+
 	}
 	else
 	{
 		Reg_RelayAllOff();
 	}
+}
+
+
+/*******************************************************
+	Возвращает состояние датчика протока воды
+********************************************************/
+bool IsWaterOk( void )
+{
+	bool isOk;
+	isOk = ( GPIO_PinRead( PORT_SENS_WATER, PIN_SENS_WATER ) == 0 );
+	
+	return isOk;
+}
+
+void switchPUMP( uint8_t on )
+{
+	GPIO_PinWrite( PORT_PUMP, PIN_PUMP, on );
 }
 
 /*******************************************************
@@ -182,7 +232,12 @@ void Thread_Regulator( void *pvParameters )
 	TickType_t xLastWakeTime;
 	int timeOutOfWater = 0;
 	int timeOutErrorPhValue = 0;
+	int openTime = 0;
 
+	//vTaskDelay(3000);
+	
+	g_isErrRegulator = Reg_IsError();
+	
 	// Initialise the xLastWakeTime variable with the current time.
 	xLastWakeTime = xTaskGetTickCount();
 	for(;;)
@@ -192,9 +247,22 @@ void Thread_Regulator( void *pvParameters )
 		
 		if( ReadWorkMode(0) != Mode_RegulatorPh )
 		{
+			// открываем регулятор полностью, выключаем насос
+			switchPUMP( 0 );
+			Reg_RelayOff( REL_CLOSE );
+			Reg_RelayOn( REL_OPEN );
+			// проверяем концевик
+			if( IsCurrent_OPEN() )
+			{
+				openTime += CYCLETIME_MS;
+				if( openTime > (int)FULL_MOVE_TIME_SEC * 1000 )
+				{
+					g_isErrRegulator = true;
+				}
+			}
 			continue;
 		}
-
+		
 		// проверяем наличие воды
 		if( IsWaterOk() )
 		{
@@ -208,21 +276,17 @@ void Thread_Regulator( void *pvParameters )
 				g_isNoWater = true;
 			}
 		}
+		
 		// проверяем ошибки по датчикам PH и выводим на дисплей значения PH
-		g_Sensor_PH = AInp_GetSystemPh();
 		if( g_Sensor_PH < 0 )
 		{
 			g_isErrSensors = true;
 		}
-		if( g_isNoWater )
-			LcdDig_PrintPH( -1, SideLEFT, false );
-		else
-			LcdDig_PrintPH( g_Sensor_PH, SideLEFT, g_isErrSensors );
-
-		LcdDig_PrintPH( g_Setup_PH, SideRIGHT, false );
 		
-		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh )
+		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh && !g_isErrRegulator )
 		{
+			openTime = 0;
+
 			// при наличии воды и отсутсвии ошибок - регулируем
 			regulator_cycle( (float)CYCLETIME_MS / 1000.0 );
 			
@@ -242,8 +306,26 @@ void Thread_Regulator( void *pvParameters )
 		}
 		else 
 		{
-			// здесь надо закрыть кран с кислотой как то...
-			// ... доделать !
+			// открываем регулятор полностью, выключаем насос
+			switchPUMP( 0 );
+			Reg_RelayOff( REL_CLOSE );
+			Reg_RelayOn( REL_OPEN );
+			// проверяем концевик
+			if( IsCurrent_OPEN() )
+			{
+				if( !g_isErrRegulator )
+				{
+					openTime += CYCLETIME_MS;
+					if( openTime > (int)FULL_MOVE_TIME_SEC * 1000 )
+					{
+						g_isErrRegulator = true;
+					}
+				}
+				else
+				{
+					openTime = 0;
+				}
+			}
 		}
 	}
 }
@@ -286,6 +368,9 @@ void Reg_RelayAllOff(void)
 	GPIO_PinWrite( Relay[1].GPIOx, Relay[1].pin, REL_OFF );
 }
 
+/*******************************************************
+	Чтение коэффициентов PID регулятора
+********************************************************/
 int Reg_ReadCoefficient( uint16_t idx )
 {
 	int value = -1;
@@ -308,6 +393,9 @@ int Reg_ReadCoefficient( uint16_t idx )
 	return value;
 }
 
+/*******************************************************
+	Запись коэффициентов PID регулятора
+********************************************************/
 bool Reg_WriteCoefficient( uint16_t idx, uint16_t val )
 {
 	if( idx > 2 )
@@ -338,6 +426,9 @@ bool Reg_WriteCoefficient( uint16_t idx, uint16_t val )
 	return isWrited;
 }
 
+/*******************************************************
+	Чтение максимального времени отсутствия воды
+********************************************************/
 int Reg_Read_MAX_OUT_OF_WATER_SEC( uint16_t idx )
 {
 	int ivalue = MAX_OUT_OF_WATER_SEC; 
@@ -345,6 +436,9 @@ int Reg_Read_MAX_OUT_OF_WATER_SEC( uint16_t idx )
 	return ivalue;
 }
 
+/*******************************************************
+	Чтение максимального времени регулировки PH до ошибки
+********************************************************/
 int Reg_Read_MAX_TIME_ERROR_PH_SEC( uint16_t idx )
 {
 	int ivalue = MAX_TIME_ERROR_PH_SEC; 
@@ -352,6 +446,9 @@ int Reg_Read_MAX_TIME_ERROR_PH_SEC( uint16_t idx )
 	return ivalue;
 }
 
+/*******************************************************
+	Запись максимального времени отсутствия воды
+********************************************************/
 bool Reg_Write_MAX_OUT_OF_WATER_SEC( uint16_t idx, uint16_t val )
 {
 	// сохраняем в EEPROM
@@ -365,6 +462,9 @@ bool Reg_Write_MAX_OUT_OF_WATER_SEC( uint16_t idx, uint16_t val )
 	return isWrited;
 }
 
+/*******************************************************
+	Запись максимального времени регулировки PH до ошибки
+********************************************************/
 bool Reg_Write_MAX_TIME_ERROR_PH_SEC( uint16_t idx, uint16_t val )
 {
 	// сохраняем в EEPROM
@@ -376,4 +476,110 @@ bool Reg_Write_MAX_TIME_ERROR_PH_SEC( uint16_t idx, uint16_t val )
 	}
 	
 	return isWrited;
+}
+
+/*******************************************************
+	Чтение времени хода регуятора PH
+********************************************************/
+int Reg_Read_FULL_MOVE_TIME_SEC( uint16_t idx )
+{
+	int ivalue = FULL_MOVE_TIME_SEC; 
+	
+	return ivalue;
+}
+
+/*******************************************************
+	Запись времени хода регуятора PH
+********************************************************/
+bool Reg_Write_FULL_MOVE_TIME_SEC( uint16_t idx, uint16_t val )
+{
+	if( val < MIN_FULL_MOVE_TIME_SEC || val > MAX_FULL_MOVE_TIME_SEC )
+		return false;
+	
+	// сохраняем в EEPROM
+	bool isWrited = FM24_WriteWords( EEADR_FULL_MOVE_TIME_SEC, &val, 1 );
+
+	if( isWrited )
+	{
+		FULL_MOVE_TIME_SEC = val;
+	}
+	
+	return isWrited;
+}
+
+/*******************************************************
+	Проверка работоспособности регуятора PH
+********************************************************/
+bool Reg_IsError( void )
+{
+	bool error = false;
+	int openTime;
+	
+	// Отключаем насос
+	switchPUMP( 0 );
+	
+	// Включаем закрытие регулятора
+	Reg_RelayOn( REL_CLOSE );
+	Reg_RelayOff( REL_OPEN );
+	
+	// проверяем концевик закрытия
+	openTime = 0;
+	
+	// ждем срабатывания концевика регулятора, чтобы пропал ток в цепи мотора
+	do
+	{
+		vTaskDelay( 1000 );
+		openTime++;
+		
+		if( openTime > FULL_MOVE_TIME_SEC )
+		{
+			// время хода больше установленного в настройках для этого регулятора
+			// либо концевик неисправен, либо мотор не крутится
+			error = true;
+			break;
+		}
+		
+	} while( IsCurrent_CLOSE() );
+	
+	if( !error )
+	{
+		// Если ошибки пока нет, то мы находимся в положении - закрыто.
+		// проверяем открытие
+		
+		Reg_RelayOff( REL_CLOSE );
+		Reg_RelayOn( REL_OPEN );
+		
+		// проверяем концевик открытия
+		vTaskDelay( 1000 );
+		
+		// здесь мы находимся в начале хода открытия регулятора
+		// поэтому должен быть ток в цепи двигателя
+		if( !IsCurrent_OPEN() )
+		{
+			// нет тока в цепи двигателя регулятора
+			error = true;
+		}
+		
+		if( !error )
+		{
+			openTime = 0;
+			// ждем срабатывания концевика регулятора, чтобы пропал ток в цепи мотора
+			do
+			{
+				vTaskDelay( 1000 );
+				openTime++;
+				
+				if( openTime > FULL_MOVE_TIME_SEC )
+				{
+					// время хода больше установленного в настройках для этого регулятора
+					// либо концевик неисправен, либо мотор не крутится
+					error = true;
+					break;
+				}
+				
+			} while( IsCurrent_OPEN() );
+		}
+	}
+	
+	return error;
 }
