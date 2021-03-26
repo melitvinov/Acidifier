@@ -44,6 +44,11 @@ uint16_t FULL_MOVE_TIME_SEC;			// полное время хода регулятора в секундах
 
 //--- FUNCTIONS ------------------
 extern int ReadWorkMode( uint16_t idx );
+void Reg_RelayOn(uint8_t indx);
+void Reg_RelayOff(uint8_t indx);
+void Reg_RelayAllOff(void);
+bool Reg_ToOpen( void );
+bool Reg_IsError( void );
 
 /*******************************************************
 Функция		: Инициализация железа
@@ -232,11 +237,9 @@ void Thread_Regulator( void *pvParameters )
 	TickType_t xLastWakeTime;
 	int timeOutOfWater = 0;
 	int timeOutErrorPhValue = 0;
-	int openTime = 0;
+	bool prevIsRegError = false;
 
-	//vTaskDelay(3000);
-	
-	g_isErrRegulator = Reg_IsError();
+	g_isErrRegulator = Reg_ToOpen();
 	
 	// Initialise the xLastWakeTime variable with the current time.
 	xLastWakeTime = xTaskGetTickCount();
@@ -245,20 +248,24 @@ void Thread_Regulator( void *pvParameters )
 		// Wait for the next cycle.
 		vTaskDelayUntil( &xLastWakeTime, CYCLETIME_MS );
 		
+		if( prevIsRegError && !g_isErrRegulator )
+		{
+			// прошел сброс ошибок, надо проверить регулятор
+			g_isErrRegulator = Reg_IsError();
+		}
+		prevIsRegError = g_isErrRegulator;
+		
 		if( ReadWorkMode(0) != Mode_RegulatorPh )
 		{
 			// открываем регулятор полностью, выключаем насос
 			switchPUMP( 0 );
 			Reg_RelayOff( REL_CLOSE );
-			Reg_RelayOn( REL_OPEN );
-			// проверяем концевик
-			if( IsCurrent_OPEN() )
+			if( !g_isErrRegulator )
 			{
-				openTime += CYCLETIME_MS;
-				if( openTime > (int)FULL_MOVE_TIME_SEC * 1000 )
-				{
-					g_isErrRegulator = true;
-				}
+				Reg_RelayOn( REL_OPEN );
+				vTaskDelay( 200 );
+				if( IsCurrent_OPEN() ) 
+					g_isErrRegulator = Reg_ToOpen();
 			}
 			continue;
 		}
@@ -267,13 +274,22 @@ void Thread_Regulator( void *pvParameters )
 		if( IsWaterOk() )
 		{
 			g_isNoWater = false;
+			timeOutOfWater = 0;
 		}
-		else
+		else if( !g_isNoWater )
 		{
 			timeOutOfWater += CYCLETIME_MS;
 			if( timeOutOfWater > (MAX_OUT_OF_WATER_SEC * 1000) )
 			{
 				g_isNoWater = true;
+				
+				if( !g_isErrRegulator )
+				{
+					Reg_RelayOn( REL_OPEN );
+					vTaskDelay( 200 );
+					if( IsCurrent_OPEN() )
+						g_isErrRegulator = Reg_ToOpen();
+				}
 			}
 		}
 		
@@ -285,7 +301,7 @@ void Thread_Regulator( void *pvParameters )
 		
 		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh && !g_isErrRegulator )
 		{
-			openTime = 0;
+			//openTime = 0;
 
 			// при наличии воды и отсутсвии ошибок - регулируем
 			regulator_cycle( (float)CYCLETIME_MS / 1000.0 );
@@ -304,28 +320,13 @@ void Thread_Regulator( void *pvParameters )
 				timeOutErrorPhValue = 0;
 			}
 		}
-		else 
+		else if( !g_isErrRegulator )
 		{
-			// открываем регулятор полностью, выключаем насос
-			switchPUMP( 0 );
-			Reg_RelayOff( REL_CLOSE );
+			// открываем регулятор полностью
 			Reg_RelayOn( REL_OPEN );
-			// проверяем концевик
-			if( IsCurrent_OPEN() )
-			{
-				if( !g_isErrRegulator )
-				{
-					openTime += CYCLETIME_MS;
-					if( openTime > (int)FULL_MOVE_TIME_SEC * 1000 )
-					{
-						g_isErrRegulator = true;
-					}
-				}
-				else
-				{
-					openTime = 0;
-				}
-			}
+			vTaskDelay( 200 );
+			if( IsCurrent_OPEN() ) 
+				g_isErrRegulator = Reg_ToOpen();
 		}
 	}
 }
@@ -512,20 +513,63 @@ bool Reg_Write_FULL_MOVE_TIME_SEC( uint16_t idx, uint16_t val )
 ********************************************************/
 bool Reg_IsError( void )
 {
-	bool error = false;
+	Reg_RelayOff( REL_OPEN );
+	Reg_RelayOff( REL_CLOSE );
+	// делаем небольшую паузу
+	vTaskDelay( 200 );
+	if( IsCurrent_CLOSE() || IsCurrent_OPEN() )
+	{
+		// если есть ток при выключенных реле
+		return true;
+	}
+	
+	// Включаем реле закрытия регулятора
+	Reg_RelayOn( REL_CLOSE );
+	// делаем небольшую паузу
+	vTaskDelay( 200 );
+	if( !IsCurrent_CLOSE() )
+	{
+		// нет тока в цепи закрытия при включенном реле
+		// возможно мы находимся в полностью закрытом положении
+		// тогда концевик открытия должен быть не замкнут, проверяем
+		Reg_RelayOff( REL_CLOSE );
+		Reg_RelayOn( REL_OPEN );
+		// делаем небольшую паузу
+		vTaskDelay( 200 );
+		if( !IsCurrent_OPEN() )
+		{
+			// нет тока в цепи открытия в положении когда он должен быть, ошибка
+			return true;
+		}
+	}
+	else
+	{
+		// есть ток в цепи закрытия
+		Reg_RelayOff( REL_CLOSE );
+	}
+	
+	return false;
+}
+
+/*******************************************************
+	Попытка полностью открыть регулятор
+********************************************************/
+bool Reg_ToOpen( void )
+{
 	int openTime;
 	
 	// Отключаем насос
 	switchPUMP( 0 );
 	
-	// Включаем закрытие регулятора
-	Reg_RelayOn( REL_CLOSE );
-	Reg_RelayOff( REL_OPEN );
+	if( Reg_IsError() )
+		return true;
 	
-	// проверяем концевик закрытия
+	// Здесь крутим до положения "полностью открыто"
+	Reg_RelayOn( REL_OPEN );
+	// ждем срабатывания концевика открытия
 	openTime = 0;
 	
-	// ждем срабатывания концевика регулятора, чтобы пропал ток в цепи мотора
+	// ждем пропадания тока в цепи мотора
 	do
 	{
 		vTaskDelay( 1000 );
@@ -535,51 +579,11 @@ bool Reg_IsError( void )
 		{
 			// время хода больше установленного в настройках для этого регулятора
 			// либо концевик неисправен, либо мотор не крутится
-			error = true;
-			break;
+			Reg_RelayOff( REL_OPEN );
+			return true;
 		}
 		
 	} while( IsCurrent_CLOSE() );
-	
-	if( !error )
-	{
-		// Если ошибки пока нет, то мы находимся в положении - закрыто.
-		// проверяем открытие
-		
-		Reg_RelayOff( REL_CLOSE );
-		Reg_RelayOn( REL_OPEN );
-		
-		// проверяем концевик открытия
-		vTaskDelay( 1000 );
-		
-		// здесь мы находимся в начале хода открытия регулятора
-		// поэтому должен быть ток в цепи двигателя
-		if( !IsCurrent_OPEN() )
-		{
-			// нет тока в цепи двигателя регулятора
-			error = true;
-		}
-		
-		if( !error )
-		{
-			openTime = 0;
-			// ждем срабатывания концевика регулятора, чтобы пропал ток в цепи мотора
-			do
-			{
-				vTaskDelay( 1000 );
-				openTime++;
-				
-				if( openTime > FULL_MOVE_TIME_SEC )
-				{
-					// время хода больше установленного в настройках для этого регулятора
-					// либо концевик неисправен, либо мотор не крутится
-					error = true;
-					break;
-				}
-				
-			} while( IsCurrent_OPEN() );
-		}
-	}
-	
-	return error;
+
+	return false;
 }

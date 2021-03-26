@@ -336,9 +336,9 @@ void clearAllErrors( void )
 	g_isErrSensors = false;
 
 	// Отображение сброса ошибок
-	LcdDig_PrintPH( 8.8, SideLEFT, true );
-	LcdDig_PrintPH( 8.8, SideRIGHT, true );
-	vTaskDelay( 1500 );
+	LcdDig_PrintPH( -1, SideLEFT, true );
+	LcdDig_PrintPH( -1, SideRIGHT, true );
+	vTaskDelay( 1000 );
 }
 
 void switchALARM( uint8_t on )
