@@ -25,8 +25,8 @@
 //-- Индексы реле
 enum 
 {
-	REL_CLOSE = 0,
-	REL_OPEN,
+	REL_PH_MINUS = 0,
+	REL_PH_PLUS,
 };
 
 typedef struct _relay_desc

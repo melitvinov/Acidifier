@@ -22,25 +22,26 @@
 /*================================================================
 	Описание выходов управления системными светодиодами
 ==================================================================*/
+
 //-- Порты
-#define PORT_LED_SYS	GPIOC
-#define PORT_LED_OK		GPIOB
-#define PORT_LED_ERR1	GPIOB
-#define PORT_LED_ERR2	GPIOB
-#define PORT_LED_ERR3	GPIOB
-#define PORT_LED_VIEW	GPIOC
-#define PORT_LED_TAR_P1	GPIOC
-#define PORT_LED_TAR_P2	GPIOC
+#define PORT_LED_SYS					GPIOC
+#define PORT_LED_WORK_OK				GPIOB
+#define PORT_LED_NO_WATER				GPIOC
+#define PORT_LED_ERR_REGULATOR			GPIOB
+#define PORT_LED_ERR_SETUP_PH_TIMEOUT	GPIOB
+#define PORT_LED_ERR_SENSORS			GPIOB
+#define PORT_LED_TAR_P1					GPIOC
+#define PORT_LED_TAR_P2					GPIOC
 
 //-- ID выводов
-#define PIN_LED_SYS		3
-#define PIN_LED_OK		0
-#define PIN_LED_ERR1	1
-#define PIN_LED_ERR2	2
-#define PIN_LED_ERR3	10
-#define PIN_LED_VIEW	12
-#define PIN_LED_TAR_P1	11
-#define PIN_LED_TAR_P2	10
+#define PIN_LED_SYS						3
+#define PIN_LED_WORK_OK					0
+#define PIN_LED_NO_WATER				12
+#define PIN_LED_ERR_REGULATOR			1
+#define PIN_LED_ERR_SETUP_PH_TIMEOUT	2
+#define PIN_LED_ERR_SENSORS				10
+#define PIN_LED_TAR_P1					11
+#define PIN_LED_TAR_P2					10
 
 /*================================================================
 	Описание выходов управления сдвиговыми регистрами для 
@@ -104,30 +105,34 @@
 ==================================================================*/
 #define PORT_BTN_PLUS   GPIOC
 #define PORT_BTN_MINUS  GPIOC
+#define PORT_BTN_ESC  	GPIOA
+
 #define PORT_SENS_WATER GPIOB
 
 #define PIN_BTN_PLUS   	4
 #define PIN_BTN_MINUS   5
+#define PIN_BTN_ESC  	7
+
 #define PIN_SENS_WATER  11
 
 /*================================================================
 	Описание выходов управления реле для регулятора
 ==================================================================*/
-#define PORT_REL_CLOSE  GPIOB
-#define PORT_REL_OPEN  	GPIOB
+#define PORT_REL_PH_MINUS 		GPIOC
+#define PORT_REL_PH_PLUS  		GPIOC
 
-#define PIN_REL_CLOSE   4
-#define PIN_REL_OPEN   	3
+#define PIN_REL_PH_MINUS  		9
+#define PIN_REL_PH_PLUS   		8
 
 /*================================================================
 	Описание входов виртуальных концевиков
 ==================================================================*/
 
-#define PORT_CURRENT_CLOSE  GPIOC
-#define PORT_CURRENT_OPEN  	GPIOC
+#define PORT_CURRENT_PH_MINUS 	GPIOC
+#define PORT_CURRENT_PH_PLUS  	GPIOC
 
-#define PIN_CURRENT_CLOSE   0
-#define PIN_CURRENT_OPEN   	1
+#define PIN_CURRENT_PH_MINUS  	0
+#define PIN_CURRENT_PH_PLUS   	1
 
 /*================================================================
 	Описание выходов управления насосом

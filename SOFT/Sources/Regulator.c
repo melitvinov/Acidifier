@@ -14,8 +14,8 @@
 
 //--- CONSTANTS ------------------
 const TRelDesc Relay[] = {
-	{PORT_REL_CLOSE, PIN_REL_CLOSE},
-	{PORT_REL_OPEN, PIN_REL_OPEN},
+	{PORT_REL_PH_MINUS, PIN_REL_PH_MINUS},
+	{PORT_REL_PH_PLUS, PIN_REL_PH_PLUS},
 };
 
 const float K_INTEGRAL_DEFAULT = 0.2;
@@ -69,8 +69,8 @@ void Reg_Init(void)
 	}
 
 	// Перевод вывода на вход с подтяжкой к VCC для токовых датчиков
-	GPIO_PinConfigure( PORT_CURRENT_CLOSE, PIN_CURRENT_CLOSE, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
-	GPIO_PinConfigure( PORT_CURRENT_OPEN, PIN_CURRENT_OPEN, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
+	GPIO_PinConfigure( PORT_CURRENT_PH_MINUS, PIN_CURRENT_PH_MINUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
+	GPIO_PinConfigure( PORT_CURRENT_PH_PLUS, PIN_CURRENT_PH_PLUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
 
 	// Перевод выводов реле насоса и тревоги на выход
 	GPIO_PinConfigure( PORT_PUMP, PIN_PUMP, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
@@ -146,10 +146,10 @@ float getPidValue( float errorPh, float deltaTime, float prevPh )
 /*******************************************************
 	Возвращает состояние концевика реле закрытия
 ********************************************************/
-bool IsCurrent_CLOSE( void )
+bool IsCurrent_PH_MINUS( void )
 {
 	bool isOk;
-	isOk = ( GPIO_PinRead( PORT_CURRENT_CLOSE, PIN_CURRENT_CLOSE ) == 0 );
+	isOk = ( GPIO_PinRead( PORT_CURRENT_PH_MINUS, PIN_CURRENT_PH_MINUS ) == 0 );
 	
 	return isOk;
 }
@@ -157,10 +157,10 @@ bool IsCurrent_CLOSE( void )
 /*******************************************************
 	Возвращает состояние концевика реле закрытия
 ********************************************************/
-bool IsCurrent_OPEN( void )
+bool IsCurrent_PH_PLUS( void )
 {
 	bool isOk;
-	isOk = ( GPIO_PinRead( PORT_CURRENT_OPEN, PIN_CURRENT_OPEN ) == 0 );
+	isOk = ( GPIO_PinRead( PORT_CURRENT_PH_PLUS, PIN_CURRENT_PH_PLUS ) == 0 );
 	
 	return isOk;
 }
@@ -170,11 +170,17 @@ bool IsCurrent_OPEN( void )
 ********************************************************/
 void regulator_cycle( float deltaTime )
 {
-	static float prevPh = 8;
-	
+	static bool isFirstPid = true;
+	static float prevPh;
 	float errorPh, pidValue;
 	
-	errorPh = g_Sensor_PH - g_Setup_PH;
+	errorPh = g_Setup_PH - g_Sensor_PH;
+
+	if( isFirstPid )
+	{
+		isFirstPid = false;
+		prevPh = g_Sensor_PH;
+	}
 	
 	pidValue = getPidValue( errorPh, deltaTime, prevPh );
 	
@@ -189,15 +195,15 @@ void regulator_cycle( float deltaTime )
 		return;
 	}
 	
-	if( pidValue > 0.15 )
+	if( pidValue < -0.15 )
 	{
-		Reg_RelayOn( REL_CLOSE );
-		Reg_RelayOff( REL_OPEN );
+		Reg_RelayOn( REL_PH_MINUS );
+		Reg_RelayOff( REL_PH_PLUS );
 	}
-	else if( pidValue < -0.15 )
+	else if( pidValue > 0.15 )
 	{
-		Reg_RelayOff( REL_CLOSE );
-		Reg_RelayOn( REL_OPEN );
+		Reg_RelayOff( REL_PH_MINUS );
+		Reg_RelayOn( REL_PH_PLUS );
 
 	}
 	else
@@ -232,14 +238,16 @@ void Thread_Regulator( void *pvParameters )
 {
 	Reg_Init();
 
-	const TickType_t CYCLETIME_MS = 500;			// интервал между циклами регулирования
+	const TickType_t CYCLETIME_MS = 300;			// интервал между циклами регулирования
 	
 	TickType_t xLastWakeTime;
 	int timeOutOfWater = 0;
 	int timeOutErrorPhValue = 0;
 	bool prevIsRegError = false;
 
-	g_isErrRegulator = Reg_ToOpen();
+	vTaskDelay( 1000 );
+	
+	g_isErrRegulator = !Reg_ToOpen();
 	
 	// Initialise the xLastWakeTime variable with the current time.
 	xLastWakeTime = xTaskGetTickCount();
@@ -257,15 +265,15 @@ void Thread_Regulator( void *pvParameters )
 		
 		if( ReadWorkMode(0) != Mode_RegulatorPh )
 		{
-			// открываем регулятор полностью, выключаем насос
+			// ставим максимальный PH (открываем регулятор полностью), выключаем насос
 			switchPUMP( 0 );
-			Reg_RelayOff( REL_CLOSE );
+			Reg_RelayOff( REL_PH_MINUS );
 			if( !g_isErrRegulator )
 			{
-				Reg_RelayOn( REL_OPEN );
+				Reg_RelayOn( REL_PH_PLUS );
 				vTaskDelay( 200 );
-				if( IsCurrent_OPEN() ) 
-					g_isErrRegulator = Reg_ToOpen();
+				if( IsCurrent_PH_PLUS() ) 
+					g_isErrRegulator = !Reg_ToOpen();
 			}
 			continue;
 		}
@@ -285,10 +293,11 @@ void Thread_Regulator( void *pvParameters )
 				
 				if( !g_isErrRegulator )
 				{
-					Reg_RelayOn( REL_OPEN );
+					Reg_RelayOn( REL_PH_PLUS );
 					vTaskDelay( 200 );
-					if( IsCurrent_OPEN() )
-						g_isErrRegulator = Reg_ToOpen();
+					if( IsCurrent_PH_PLUS() )
+						g_isErrRegulator = !Reg_ToOpen();
+					Reg_RelayOff( REL_PH_PLUS );
 				}
 			}
 		}
@@ -301,7 +310,7 @@ void Thread_Regulator( void *pvParameters )
 		
 		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh && !g_isErrRegulator )
 		{
-			//openTime = 0;
+			g_Sensor_PH = AInp_GetSystemPh();
 
 			// при наличии воды и отсутсвии ошибок - регулируем
 			regulator_cycle( (float)CYCLETIME_MS / 1000.0 );
@@ -323,9 +332,9 @@ void Thread_Regulator( void *pvParameters )
 		else if( !g_isErrRegulator )
 		{
 			// открываем регулятор полностью
-			Reg_RelayOn( REL_OPEN );
+			Reg_RelayOn( REL_PH_PLUS );
 			vTaskDelay( 200 );
-			if( IsCurrent_OPEN() ) 
+			if( IsCurrent_PH_PLUS() ) 
 				g_isErrRegulator = Reg_ToOpen();
 		}
 	}
@@ -513,42 +522,46 @@ bool Reg_Write_FULL_MOVE_TIME_SEC( uint16_t idx, uint16_t val )
 ********************************************************/
 bool Reg_IsError( void )
 {
-	Reg_RelayOff( REL_OPEN );
-	Reg_RelayOff( REL_CLOSE );
+	bool isError = false;
+	
+	Reg_RelayOff( REL_PH_PLUS );
+	Reg_RelayOff( REL_PH_MINUS );
 	// делаем небольшую паузу
 	vTaskDelay( 200 );
-	if( IsCurrent_CLOSE() || IsCurrent_OPEN() )
+	if( IsCurrent_PH_MINUS() || IsCurrent_PH_PLUS() )
 	{
 		// если есть ток при выключенных реле
-		return true;
-	}
-	
-	// Включаем реле закрытия регулятора
-	Reg_RelayOn( REL_CLOSE );
-	// делаем небольшую паузу
-	vTaskDelay( 200 );
-	if( !IsCurrent_CLOSE() )
-	{
-		// нет тока в цепи закрытия при включенном реле
-		// возможно мы находимся в полностью закрытом положении
-		// тогда концевик открытия должен быть не замкнут, проверяем
-		Reg_RelayOff( REL_CLOSE );
-		Reg_RelayOn( REL_OPEN );
-		// делаем небольшую паузу
-		vTaskDelay( 200 );
-		if( !IsCurrent_OPEN() )
-		{
-			// нет тока в цепи открытия в положении когда он должен быть, ошибка
-			return true;
-		}
+		isError = true;
 	}
 	else
 	{
-		// есть ток в цепи закрытия
-		Reg_RelayOff( REL_CLOSE );
+		// Включаем реле закрытия регулятора
+		Reg_RelayOn( REL_PH_MINUS );
+		// делаем небольшую паузу
+		vTaskDelay( 200 );
+		if( !IsCurrent_PH_MINUS() )
+		{
+			// нет тока в цепи закрытия при включенном реле
+			// возможно мы находимся в полностью закрытом положении
+			// тогда концевик открытия должен быть не замкнут, проверяем
+			Reg_RelayOff( REL_PH_MINUS );
+			Reg_RelayOn( REL_PH_PLUS );
+			// делаем небольшую паузу
+			vTaskDelay( 200 );
+			if( !IsCurrent_PH_PLUS() )
+			{
+				// нет тока в цепи открытия в положении когда он должен быть, ошибка
+				isError = true;
+			}
+		}
+		else
+		{
+			// есть ток в цепи закрытия
+			Reg_RelayOff( REL_PH_MINUS );
+		}
 	}
 	
-	return false;
+	return isError;
 }
 
 /*******************************************************
@@ -556,34 +569,44 @@ bool Reg_IsError( void )
 ********************************************************/
 bool Reg_ToOpen( void )
 {
+	bool isOpenOk = false;
+	
 	int openTime;
 	
 	// Отключаем насос
 	switchPUMP( 0 );
 	
-	if( Reg_IsError() )
-		return true;
-	
-	// Здесь крутим до положения "полностью открыто"
-	Reg_RelayOn( REL_OPEN );
-	// ждем срабатывания концевика открытия
-	openTime = 0;
-	
-	// ждем пропадания тока в цепи мотора
-	do
+	if( !Reg_IsError() )
 	{
-		vTaskDelay( 1000 );
-		openTime++;
+		// Здесь крутим до положения "полностью открыто"
+		Reg_RelayOn( REL_PH_PLUS );
+		// ждем срабатывания концевика открытия
+		openTime = 0;
 		
-		if( openTime > FULL_MOVE_TIME_SEC )
+		// ждем пропадания тока в цепи мотора
+		for( ;; )
 		{
-			// время хода больше установленного в настройках для этого регулятора
-			// либо концевик неисправен, либо мотор не крутится
-			Reg_RelayOff( REL_OPEN );
-			return true;
-		}
-		
-	} while( IsCurrent_CLOSE() );
+			vTaskDelay( 1000 );
+			openTime++;
 
-	return false;
+			if( !IsCurrent_PH_PLUS() ) 
+			{
+				// нет тока в цепи мотора, сработал концевик, регулятор открыт полностью
+				isOpenOk = true;
+				break;
+			}
+			
+			if( openTime > FULL_MOVE_TIME_SEC )
+			{
+				// время хода больше установленного в настройках для этого регулятора
+				// либо концевик неисправен, либо мотор не крутится
+				break;
+			}
+		
+		}
+
+		Reg_RelayOff( REL_PH_PLUS );
+	}
+	
+	return isOpenOk;
 }

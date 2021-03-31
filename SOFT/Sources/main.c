@@ -40,7 +40,7 @@ float g_Setup_PH;					// заданное пользователем значение PH
 bool g_isBtnPlusClick;
 bool g_isBtnMinusClick;
 bool g_isDblBtnPressed;
-bool g_isCancelPressed;
+bool g_isEscPressed;
 
 //--- IRQ ------------------------
 
@@ -118,6 +118,10 @@ bool _isBtnMinusPressed( void )
 {
 	return (bool) (GPIO_PinRead( PORT_BTN_MINUS, PIN_BTN_MINUS )==0);
 }
+bool _isBtnEscPressed( void )
+{
+	return (bool) (GPIO_PinRead( PORT_BTN_ESC, PIN_BTN_ESC )==0);
+}
 
 /*******************************************************
 Поток		: Рабочий поток устройства
@@ -132,21 +136,29 @@ void Thread_Buttons( void *pvParameters )
 
 	bool isBtnPlusPressedPrev = false;
 	bool isBtnMinusPressedPrev = false;
+	bool isBtnEscPressedPrev = false;
+	
 	bool isBtnPlusPressedNow;
 	bool isBtnMinusPressedNow;
+	bool isBtnEscPressedNow;
+
 	int msBtnPlusPressed = 0;
 	int msBtnMinusPressed = 0;
+	int msBtnEscPressed = 0;
+
 	bool skipNextUpPlus = false;
 	bool skipNextUpMinus = false;
 	bool skipDblButtons = false;
 	
 	GPIO_PinConfigure( PORT_BTN_PLUS, PIN_BTN_PLUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
 	GPIO_PinConfigure( PORT_BTN_MINUS, PIN_BTN_MINUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
+	GPIO_PinConfigure( PORT_BTN_ESC, PIN_BTN_ESC, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
 	
 	for(;;)
 	{
 		isBtnPlusPressedNow = _isBtnPlusPressed();
 		isBtnMinusPressedNow = _isBtnMinusPressed();
+		isBtnEscPressedNow = _isBtnEscPressed();
 		
 		if( !isBtnPlusPressedNow )
 		{
@@ -204,7 +216,6 @@ void Thread_Buttons( void *pvParameters )
 			if( isBtnMinusPressedPrev ) 
 			{
 				msBtnMinusPressed += TIME_MS;
-				
 				if(( msBtnPlusPressed > TIME_DBLBTN ) && ( msBtnMinusPressed > TIME_DBLBTN ) && !skipDblButtons )
 				{
 					g_isDblBtnPressed = true;
@@ -212,15 +223,31 @@ void Thread_Buttons( void *pvParameters )
 					skipNextUpMinus = true;
 					skipDblButtons = true;
 				}
-				else if( msBtnMinusPressed > TIME_DBLBTN )
-				{	
-					g_isCancelPressed = true;
+			}
+		}
+			
+		if( !isBtnEscPressedNow )
+		{
+			msBtnEscPressed = 0;
+		}
+		else
+		{
+			if( isBtnEscPressedPrev ) 
+			{
+				if( !g_isEscPressed )
+				{
+					msBtnEscPressed += TIME_MS;
+					if( msBtnEscPressed > TIME_DBLBTN )
+					{
+						g_isEscPressed = true;
+					}
 				}
 			}
 		}
 		
 		isBtnMinusPressedPrev = isBtnMinusPressedNow;
 		isBtnPlusPressedPrev = isBtnPlusPressedNow;
+		isBtnEscPressedPrev = isBtnEscPressedNow;
 		
 		vTaskDelay(TIME_MS);
 	}
@@ -325,7 +352,7 @@ void clearAllButtons( void )
 	g_isDblBtnPressed = false;
 	g_isBtnPlusClick = false;
 	g_isBtnMinusClick = false;
-	g_isCancelPressed = false;
+	g_isEscPressed = false;
 }
 
 // Сброс всех ошибок
@@ -437,7 +464,7 @@ void Thread_WORK( void *pvParameters )
 					if( g_Setup_PH - 0.1 > 0 )
 						SetupPhValue( g_Setup_PH - 0.1 );
 				}
-				else if( g_isCancelPressed )
+				else if( g_isEscPressed )
 				{
 					// сброс нажатых кнопок
 					clearAllButtons();
