@@ -199,12 +199,21 @@ void regulator_cycle( float deltaTime )
 	{
 		Reg_RelayOn( REL_PH_MINUS );
 		Reg_RelayOff( REL_PH_PLUS );
+		if( deltaTime > 0.3 )
+		{
+			vTaskDelay( 300 );
+			Reg_RelayOff( REL_PH_MINUS );
+		}
 	}
 	else if( pidValue > 0.15 )
 	{
 		Reg_RelayOff( REL_PH_MINUS );
 		Reg_RelayOn( REL_PH_PLUS );
-
+		if( deltaTime > 0.3 )
+		{
+			vTaskDelay( 300 );
+			Reg_RelayOff( REL_PH_PLUS );
+		}
 	}
 	else
 	{
@@ -238,7 +247,7 @@ void Thread_Regulator( void *pvParameters )
 {
 	Reg_Init();
 
-	const TickType_t CYCLETIME_MS = 300;			// интервал между циклами регулирования
+	const TickType_t CYCLETIME_MS = 1000;			// интервал между циклами регулирования
 	
 	TickType_t xLastWakeTime;
 	int timeOutOfWater = 0;
@@ -283,6 +292,7 @@ void Thread_Regulator( void *pvParameters )
 		{
 			g_isNoWater = false;
 			timeOutOfWater = 0;
+			switchPUMP( 1 );
 		}
 		else if( !g_isNoWater )
 		{
@@ -290,6 +300,7 @@ void Thread_Regulator( void *pvParameters )
 			if( timeOutOfWater > (MAX_OUT_OF_WATER_SEC * 1000) )
 			{
 				g_isNoWater = true;
+				switchPUMP( 0 );
 				
 				if( !g_isErrRegulator )
 				{
