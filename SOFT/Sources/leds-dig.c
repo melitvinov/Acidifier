@@ -8,9 +8,11 @@
 
 //--- INCLUDES -------------------
 #include "leds-dig.h"
+#include "leds.h"
 #include "math.h"
 
 //--- CONSTANTS ------------------
+
 uint8_t DIGIT[] = {
 	0x3F,	// '0'
 	0x06,	// '1'
@@ -23,6 +25,14 @@ uint8_t DIGIT[] = {
 	0x7F,	// '8'
 	0x6F,	// '9'
 	0x40,	// '-'
+	
+	// линии 
+	0x01,	//	line_top = 11,
+	0x02,	//	line_right_top,
+	0x04,	//	line_right_bot,
+	0x08,	//	line_bot,
+	0x10,	//	line_left_bot
+	0x20	//	line_left_top,
 };
 
 const int CLOCK_DELAY_TIME = 20;
@@ -32,6 +42,12 @@ const int LATCH_DELAY_TIME = 20;
 
 TLedDig g_LedDig[4];	// текущее состояние четырех цифр дисплея
 
+extern bool g_isNoWater;
+extern bool g_isErrRegulator;
+extern bool g_isErrTimeoutSetupPh;
+extern bool g_isErrSensors;
+
+extern void switchALARM( uint8_t on );
 
 //--- FUNCTIONS ------------------
 void delay_cycles( int num )
@@ -213,12 +229,27 @@ void Thread_Leds_Dig( void *pvParameters )
 	LcdDig_init();
 	LcdDig_ShowBegin();
 	
+	const TickType_t CYCLETIME_MS = 500;			// интервал между циклами регулирования
+	TickType_t xLastWakeTime;
+
+	// Initialise the xLastWakeTime variable with the current time.
+	xLastWakeTime = xTaskGetTickCount();
 	for(;;)
 	{
+		// Wait for the next cycle.
+		vTaskDelayUntil( &xLastWakeTime, CYCLETIME_MS );
+
 		LcdDig_refresh( current_blinking_on );
 		
+		// управляем реле тревоги
+		switchALARM( g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh );
+	
+		g_isErrRegulator && current_blinking_on ? Led_On( LED_ERR_REGULATOR ) : Led_Off( LED_ERR_REGULATOR );
+		g_isErrSensors && current_blinking_on ? Led_On( LED_ERR_SENSORS ) : Led_Off( LED_ERR_SENSORS );
+		g_isErrTimeoutSetupPh && current_blinking_on ? Led_On( LED_ERR_SETUP_PH_TIMEOUT ) : Led_Off( LED_ERR_SETUP_PH_TIMEOUT );
+		g_isNoWater && current_blinking_on ? Led_On( LED_NO_WATER ) : Led_Off( LED_NO_WATER );
+		
 		current_blinking_on = !current_blinking_on;
-		vTaskDelay(500);
 	}
 }
 

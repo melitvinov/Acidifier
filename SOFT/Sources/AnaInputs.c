@@ -157,33 +157,24 @@ float AInp_GetFloatSensorPh( uint8_t idx )
 	return value;
 }
 
-float AInp_GetSystemPh( void )
+float AInp_GetSystemPh( bool * pIsTooDiff )
 {
 	float value1 = AInp_GetFloatSensorPh( 0 );
 	float value2 = AInp_GetFloatSensorPh( 1 );
 	
 	float value = 0;
-	if( value1 < 0 || value2 < 0 )
-	{
-		value = -1;
-	}
-	else
-	{
-		value = fabs( value1 - value2 );
-		if( value > 0.5 )
-			value = -1;
-		else
-			value = value1;
-	}
+	value = fabs( value1 - value2 );
+	*pIsTooDiff = ( value > 0.5 ) ? true : false;
 	
-	return value;
+	return value1;
 }
 
 int AInp_ReadSystemPh( uint16_t idx )
 {
 	int ivalue = 0; 
-	float fvalue = AInp_GetSystemPh();
-	if( fvalue < 0 )
+	bool IsTooDiff;
+	float fvalue = AInp_GetSystemPh( &IsTooDiff );
+	if( fvalue < 0 || IsTooDiff )
 	{
 		ivalue = 65535;
 	}

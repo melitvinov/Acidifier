@@ -30,6 +30,15 @@ typedef struct _led_dig
 	bool isPoint;
 } TLedDig;
 
+enum LINE_SIMBOL {
+	line_top = 11,
+	line_right_top,
+	line_right_bot,
+	line_bot,
+	line_left_bot,
+	line_left_top,
+};
+
 //--- FUNCTIONS ------------------
 void Thread_Leds_Dig( void *pvParameters );
 
@@ -39,5 +48,5 @@ void LcdDig_PrintPH( float valuePH, ELcdSide side, bool isBlink );
 void LcdDig_DispBlinkOff( uint8_t side );
 void LcdDig_DispBlinkOn( uint8_t side );
 void LcdDig_DispOff( void );
-
+void LcdDig_refresh( bool current_blinking_on );
 #endif

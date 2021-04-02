@@ -41,6 +41,7 @@ bool g_isBtnPlusClick;
 bool g_isBtnMinusClick;
 bool g_isDblBtnPressed;
 bool g_isEscPressed;
+bool g_isEscClick;
 
 //--- IRQ ------------------------
 
@@ -132,7 +133,7 @@ void Thread_Buttons( void *pvParameters )
 {
 	const int TIME_MS = 25; 
 	const int TIME_MAXMS_BTNDOWN = 500; 
-	const int TIME_DBLBTN = 2000; 
+	const int TIME_DBLBTN = 1200; 
 
 	bool isBtnPlusPressedPrev = false;
 	bool isBtnMinusPressedPrev = false;
@@ -229,19 +230,25 @@ void Thread_Buttons( void *pvParameters )
 		if( !isBtnEscPressedNow )
 		{
 			msBtnEscPressed = 0;
+			if( isBtnEscPressedPrev )
+			{
+				g_isEscClick = true;
+			}
 		}
 		else
 		{
-			if( isBtnEscPressedPrev ) 
+			if( !g_isEscPressed && isBtnEscPressedPrev ) 
 			{
-				if( !g_isEscPressed )
+				msBtnEscPressed += TIME_MS;
+				if( msBtnEscPressed > TIME_DBLBTN )
 				{
-					msBtnEscPressed += TIME_MS;
-					if( msBtnEscPressed > TIME_DBLBTN )
-					{
-						g_isEscPressed = true;
-					}
+					g_isEscPressed = true;
+					msBtnEscPressed = 0;
 				}
+			}
+			else
+			{
+				msBtnEscPressed = 0;
 			}
 		}
 		
@@ -288,6 +295,7 @@ int main(void)
 	xTaskCreate( Thread_Buttons, (const char*)"BTN", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
 	xTaskCreate( Thread_WORK, (const char*)"WORK", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+	
 	/* Start the scheduler. */
 	vTaskStartScheduler();
 
@@ -353,19 +361,106 @@ void clearAllButtons( void )
 	g_isBtnPlusClick = false;
 	g_isBtnMinusClick = false;
 	g_isEscPressed = false;
+	g_isEscClick = false;
+}
+
+void display_clearErrors( void )
+{
+	const uint8_t DISP_TIME_MS = 50;
+	
+	TLedDig dig;
+	dig.isBlinking = false;
+	dig.isPoint = false;
+
+	for( int j=0; j<3; j++ )
+	{
+		
+		for( int i=0; i<4; i++ )
+		{
+			int idx = i;
+			dig.isOn = true;
+			dig.value = line_top;
+			LcdDig_SetDigit( i, &dig );
+			dig.isOn = false;
+			if( ++idx > 3 ) idx -= 4;
+			LcdDig_SetDigit( idx, &dig );
+			if( ++idx > 3 ) idx -= 4;
+			LcdDig_SetDigit( idx, &dig );
+			if( ++idx > 3 ) idx -= 4;
+			LcdDig_SetDigit( idx, &dig );
+			LcdDig_refresh( false );
+			vTaskDelay( DISP_TIME_MS );
+		}
+		
+		dig.isOn = true;
+		dig.value = line_right_top;
+		LcdDig_SetDigit( 3, &dig );
+		dig.isOn = false;
+		LcdDig_SetDigit( 0, &dig );
+		LcdDig_SetDigit( 1, &dig );
+		LcdDig_SetDigit( 2, &dig );
+		LcdDig_refresh( false );
+		vTaskDelay( DISP_TIME_MS );
+		
+		dig.isOn = true;
+		dig.value = line_right_bot;
+		LcdDig_SetDigit( 3, &dig );
+		dig.isOn = false;
+		LcdDig_SetDigit( 0, &dig );
+		LcdDig_SetDigit( 1, &dig );
+		LcdDig_SetDigit( 2, &dig );
+		LcdDig_refresh( false );
+		vTaskDelay( DISP_TIME_MS );
+		
+		for( int i=3; i>=0; i-- )
+		{
+			int idx = i;
+			dig.isOn = true;
+			dig.value = line_bot;
+			LcdDig_SetDigit( i, &dig );
+			dig.isOn = false;
+			if( ++idx > 3 ) idx -= 4;
+			LcdDig_SetDigit( idx, &dig );
+			if( ++idx > 3 ) idx -= 4;
+			LcdDig_SetDigit( idx, &dig );
+			if( ++idx > 3 ) idx -= 4;
+			LcdDig_SetDigit( idx, &dig );
+			LcdDig_refresh( false );
+			vTaskDelay( DISP_TIME_MS );
+		}
+
+		dig.isOn = true;
+		dig.value = line_left_bot;
+		LcdDig_SetDigit( 0, &dig );
+		dig.isOn = false;
+		LcdDig_SetDigit( 1, &dig );
+		LcdDig_SetDigit( 2, &dig );
+		LcdDig_SetDigit( 3, &dig );
+		LcdDig_refresh( false );
+		vTaskDelay( DISP_TIME_MS );
+
+		dig.isOn = true;
+		dig.value = line_left_top;
+		LcdDig_SetDigit( 0, &dig );
+		dig.isOn = false;
+		LcdDig_SetDigit( 1, &dig );
+		LcdDig_SetDigit( 2, &dig );
+		LcdDig_SetDigit( 3, &dig );
+		LcdDig_refresh( false );
+		vTaskDelay( DISP_TIME_MS );
+	}
+	LcdDig_DispOff();
 }
 
 // Сброс всех ошибок
 void clearAllErrors( void )
 {
+	// Отображение сброса ошибок
+	display_clearErrors();
+
 	g_isErrRegulator = false;
 	g_isErrTimeoutSetupPh = false;
 	g_isErrSensors = false;
-
-	// Отображение сброса ошибок
-	LcdDig_PrintPH( -1, SideLEFT, true );
-	LcdDig_PrintPH( -1, SideRIGHT, true );
-	vTaskDelay( 1000 );
 }
 
 void switchALARM( uint8_t on )
@@ -381,7 +476,7 @@ void switchALARM( uint8_t on )
 void Thread_WORK( void *pvParameters )
 {
 	float ph1, ph2;
-	bool stopWork, alarm;
+	bool stopWork, IsPhSensorsTooDiff;
 	
 	// Инициализация выхода тревоги
 	GPIO_PinConfigure( PORT_ALARM, PIN_ALARM, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
@@ -405,14 +500,7 @@ void Thread_WORK( void *pvParameters )
 	{
 		vTaskDelay(50);
 		
-		alarm = g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh;
-		stopWork = alarm || g_isNoWater;
-		g_isErrRegulator ? Led_On( LED_ERR_REGULATOR ) : Led_Off( LED_ERR_REGULATOR );
-		g_isErrSensors ? Led_On( LED_ERR_SENSORS ) : Led_Off( LED_ERR_SENSORS );
-		g_isErrTimeoutSetupPh ? Led_On( LED_ERR_SETUP_PH_TIMEOUT ) : Led_Off( LED_ERR_SETUP_PH_TIMEOUT );
-		g_isNoWater ? Led_On( LED_NO_WATER ) : Led_Off( LED_NO_WATER );
-		
-		switchALARM( alarm );
+		stopWork = g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh || g_isNoWater;
 		
 		switch( (int)g_WorkMode )
 		{
@@ -421,7 +509,7 @@ void Thread_WORK( void *pvParameters )
 				Led_Off( LED_TAR_P1 );
 				Led_Off( LED_TAR_P2 );
 
-				g_Sensor_PH = AInp_GetSystemPh();
+				g_Sensor_PH = AInp_GetSystemPh( &IsPhSensorsTooDiff );
 
 				if( g_isNoWater )
 					LcdDig_PrintPH( -1, SideLEFT, false );
@@ -517,7 +605,7 @@ void Thread_WORK( void *pvParameters )
 					clearAllButtons();
 					g_WorkMode = Mode_Calibrating_PH2;
 				}
-				else if( g_isBtnMinusClick )
+				else if( g_isEscClick )
 				{
 					// Отмена калибровки точки
 
@@ -564,7 +652,7 @@ void Thread_WORK( void *pvParameters )
 					
 					g_WorkMode = Mode_RegulatorPh;
 				}
-				else if( g_isBtnPlusClick || g_isBtnMinusClick )
+				else if( g_isEscClick )
 				{
 					// Отмена калибровки точки
 

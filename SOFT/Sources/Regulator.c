@@ -72,6 +72,9 @@ void Reg_Init(void)
 	GPIO_PinConfigure( PORT_CURRENT_PH_MINUS, PIN_CURRENT_PH_MINUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
 	GPIO_PinConfigure( PORT_CURRENT_PH_PLUS, PIN_CURRENT_PH_PLUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
 
+	// ѕеревод вывода на вход с подт€жкой к VCC дл€ датчика воды
+	GPIO_PinConfigure( PORT_SENS_WATER, PIN_SENS_WATER, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
+	
 	// ѕеревод выводов реле насоса и тревоги на выход
 	GPIO_PinConfigure( PORT_PUMP, PIN_PUMP, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
 	// ќтключение насоса и тревоги
@@ -252,7 +255,9 @@ void Thread_Regulator( void *pvParameters )
 	TickType_t xLastWakeTime;
 	int timeOutOfWater = 0;
 	int timeOutErrorPhValue = 0;
+	int timeOutErrorPhSensors = 0;
 	bool prevIsRegError = false;
+	bool IsPhSensorsTooDiff;
 
 	vTaskDelay( 1000 );
 	
@@ -314,15 +319,26 @@ void Thread_Regulator( void *pvParameters )
 		}
 		
 		// провер€ем ошибки по датчикам PH и выводим на дисплей значени€ PH
-		if( g_Sensor_PH < 0 )
+		g_Sensor_PH = AInp_GetSystemPh( &IsPhSensorsTooDiff );
+		if( g_Sensor_PH < 0 || IsPhSensorsTooDiff )
 		{
-			g_isErrSensors = true;
+			if( !g_isErrSensors )
+			{
+				timeOutErrorPhSensors  += CYCLETIME_MS;
+				if( timeOutErrorPhSensors > (MAX_OUT_OF_WATER_SEC * 1000) )
+				{
+					g_isErrSensors = true;
+					timeOutErrorPhSensors = 0;
+				}
+			}
+		}
+		else
+		{
+			timeOutErrorPhSensors = 0;
 		}
 		
 		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh && !g_isErrRegulator )
 		{
-			g_Sensor_PH = AInp_GetSystemPh();
-
 			// при наличии воды и отсутсвии ошибок - регулируем
 			regulator_cycle( (float)CYCLETIME_MS / 1000.0 );
 			
@@ -533,6 +549,9 @@ bool Reg_Write_FULL_MOVE_TIME_SEC( uint16_t idx, uint16_t val )
 ********************************************************/
 bool Reg_IsError( void )
 {
+	// !!! ¬–≈ћ≈ЌЌјя «ј√Ћ”Ў ј
+	//return false;
+
 	bool isError = false;
 	
 	Reg_RelayOff( REL_PH_PLUS );
@@ -580,6 +599,9 @@ bool Reg_IsError( void )
 ********************************************************/
 bool Reg_ToOpen( void )
 {
+	// !!! ¬–≈ћ≈ЌЌјя «ј√Ћ”Ў ј
+	//return true;
+	
 	bool isOpenOk = false;
 	
 	int openTime;

@@ -55,5 +55,5 @@ bool AInp_WritePhTar2( uint16_t idx, uint16_t val );
 int AInp_ReadSystemPh( uint16_t idx );
 
 float AInp_GetFloatSensorPh( uint8_t idx );
-float AInp_GetSystemPh( void );
+float AInp_GetSystemPh( bool * pIsTooDiff );
 #endif
