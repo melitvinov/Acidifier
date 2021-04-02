@@ -514,7 +514,7 @@ void Thread_WORK( void *pvParameters )
 				if( g_isNoWater )
 					LcdDig_PrintPH( -1, SideLEFT, false );
 				else
-					LcdDig_PrintPH( g_Sensor_PH, SideLEFT, g_isErrSensors );
+					LcdDig_PrintPH( g_Sensor_PH, SideLEFT, false );
 
 				LcdDig_PrintPH( g_Setup_PH, SideRIGHT, false );
 			

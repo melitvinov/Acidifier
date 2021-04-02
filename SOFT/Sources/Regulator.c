@@ -202,21 +202,11 @@ void regulator_cycle( float deltaTime )
 	{
 		Reg_RelayOn( REL_PH_MINUS );
 		Reg_RelayOff( REL_PH_PLUS );
-		if( deltaTime > 0.3 )
-		{
-			vTaskDelay( 300 );
-			Reg_RelayOff( REL_PH_MINUS );
-		}
 	}
 	else if( pidValue > 0.15 )
 	{
 		Reg_RelayOff( REL_PH_MINUS );
 		Reg_RelayOn( REL_PH_PLUS );
-		if( deltaTime > 0.3 )
-		{
-			vTaskDelay( 300 );
-			Reg_RelayOff( REL_PH_PLUS );
-		}
 	}
 	else
 	{
@@ -250,7 +240,7 @@ void Thread_Regulator( void *pvParameters )
 {
 	Reg_Init();
 
-	const TickType_t CYCLETIME_MS = 1000;			// интервал между циклами регулирования
+	const TickType_t CYCLETIME_MS = 200;			// интервал между циклами регулирования
 	
 	TickType_t xLastWakeTime;
 	int timeOutOfWater = 0;
@@ -282,13 +272,10 @@ void Thread_Regulator( void *pvParameters )
 			// ставим максимальный PH (открываем регулятор полностью), выключаем насос
 			switchPUMP( 0 );
 			Reg_RelayOff( REL_PH_MINUS );
-			if( !g_isErrRegulator )
-			{
-				Reg_RelayOn( REL_PH_PLUS );
-				vTaskDelay( 200 );
-				if( IsCurrent_PH_PLUS() ) 
-					g_isErrRegulator = !Reg_ToOpen();
-			}
+			Reg_RelayOn( REL_PH_PLUS );
+			timeOutErrorPhSensors = 0;
+			timeOutErrorPhValue = 0;
+			timeOutOfWater = 0;
 			continue;
 		}
 		
