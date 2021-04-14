@@ -48,6 +48,13 @@ bool g_isEscClick;
 //--- FUNCTIONS ------------------
 void Thread_WORK( void *pvParameters );
 
+void switchPUMP( uint8_t on )
+{
+	on > 0 ? Led_On( LED_WORK_OK ) : Led_Off( LED_WORK_OK );
+	
+	GPIO_PinWrite( PORT_PUMP, PIN_PUMP, on );
+}
+
 int ReadWorkMode( uint16_t idx )
 {
 	return g_WorkMode;
@@ -455,17 +462,55 @@ void display_clearErrors( void )
 // Сброс всех ошибок
 void clearAllErrors( void )
 {
-	// Отображение сброса ошибок
-	display_clearErrors();
-
 	g_isErrRegulator = false;
 	g_isErrTimeoutSetupPh = false;
 	g_isErrSensors = false;
+
+	// Отображение сброса ошибок
+	display_clearErrors();
 }
 
 void switchALARM( uint8_t on )
 {
 	GPIO_PinWrite( PORT_ALARM , PIN_ALARM, on );
+}
+
+void setupMoveLeds( void )
+{
+	bool isPhPlusMotorOn = (GPIO_PinRead( PORT_REL_PH_PLUS, PIN_REL_PH_PLUS ) == 0);
+	bool isPhMinusMotorOn = (GPIO_PinRead( PORT_REL_PH_MINUS, PIN_REL_PH_MINUS ) == 0);
+
+	if( !isPhPlusMotorOn )
+	{
+		Led_Off( LED_MOVE_PH_PLUS );
+		Led_Off( LED_STOP_PH_PLUS );
+	}
+	else if( IsCurrent_PH_PLUS() )
+	{
+		Led_On( LED_MOVE_PH_PLUS );
+		Led_Off( LED_STOP_PH_PLUS );
+	}
+	else
+	{
+		Led_Off( LED_MOVE_PH_PLUS );
+		Led_On( LED_STOP_PH_PLUS );
+	}
+	
+	if( !isPhMinusMotorOn )
+	{
+		Led_Off( LED_MOVE_PH_MINUS );
+		Led_Off( LED_STOP_PH_MINUS );
+	}
+	else if( IsCurrent_PH_PLUS() )
+	{
+		Led_On( LED_MOVE_PH_MINUS );
+		Led_Off( LED_STOP_PH_MINUS );
+	}
+	else
+	{
+		Led_Off( LED_MOVE_PH_MINUS );
+		Led_On( LED_STOP_PH_MINUS );
+	}
 }
 
 /*******************************************************
@@ -494,11 +539,11 @@ void Thread_WORK( void *pvParameters )
 		vTaskDelay(100);
 	}
 	
-	//vTaskDelay(2000);
-
 	for(;;)
 	{
 		vTaskDelay(50);
+		
+		setupMoveLeds();
 		
 		stopWork = g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh || g_isNoWater;
 		
@@ -520,13 +565,15 @@ void Thread_WORK( void *pvParameters )
 			
 				if( stopWork )
 				{
-					Led_Off( LED_WORK_OK );
+					// Отключаем насос
+					switchPUMP( 0 );
 					LcdDig_DispBlinkOn( SideLEFT );
 					LcdDig_DispBlinkOff( SideRIGHT );
 				}
 				else
 				{
-					Led_On( LED_WORK_OK );
+					// Включаем насос
+					switchPUMP( 1 );
 					LcdDig_DispBlinkOff( SideLEFT );
 					LcdDig_DispBlinkOff( SideRIGHT );
 				}
@@ -563,7 +610,8 @@ void Thread_WORK( void *pvParameters )
 			
 			case Mode_Calibrating_PH1:
 				
-				Led_Off( LED_WORK_OK );
+				// Отключаем насос
+				switchPUMP( 0 );
 				Led_On( LED_TAR_P1 );
 				Led_Off( LED_TAR_P2 );
 
@@ -618,7 +666,8 @@ void Thread_WORK( void *pvParameters )
 				break;
 				
 			case Mode_Calibrating_PH2:
-				Led_Off( LED_WORK_OK );
+				// Отключаем насос
+				switchPUMP( 0 );
 				Led_On( LED_TAR_P2 );
 				Led_Off( LED_TAR_P1 );
 

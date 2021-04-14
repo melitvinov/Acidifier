@@ -51,4 +51,7 @@ bool Reg_Write_MAX_TIME_ERROR_PH_SEC( uint16_t idx, uint16_t val );
 int Reg_Read_FULL_MOVE_TIME_SEC( uint16_t idx );
 bool Reg_Write_FULL_MOVE_TIME_SEC( uint16_t idx, uint16_t val );
 
+bool IsCurrent_PH_MINUS( void );
+bool IsCurrent_PH_PLUS( void );
+
 #endif

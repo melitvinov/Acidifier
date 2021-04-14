@@ -61,10 +61,10 @@ void Reg_Init(void)
 	
 	for( int i=0; i<2; i++ )
 	{
-		// Перевод вывода для светодиода на выход с открытым коллектором
+		// Перевод вывода на выход с открытым коллектором для управления реле
 		GPIO_PinConfigure( Relay[i].GPIOx, Relay[i].pin, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
 		
-		// Отключение светодиода
+		// Отключение реле
 		GPIO_PinWrite( Relay[i].GPIOx, Relay[i].pin, REL_OFF );
 	}
 
@@ -226,11 +226,6 @@ bool IsWaterOk( void )
 	return isOk;
 }
 
-void switchPUMP( uint8_t on )
-{
-	GPIO_PinWrite( PORT_PUMP, PIN_PUMP, on );
-}
-
 /*******************************************************
 Поток		: Рабочий поток устройства
 Параметр 1	: не используется
@@ -269,8 +264,7 @@ void Thread_Regulator( void *pvParameters )
 		
 		if( ReadWorkMode(0) != Mode_RegulatorPh )
 		{
-			// ставим максимальный PH (открываем регулятор полностью), выключаем насос
-			switchPUMP( 0 );
+			// ставим максимальный PH (открываем регулятор полностью)
 			Reg_RelayOff( REL_PH_MINUS );
 			Reg_RelayOn( REL_PH_PLUS );
 			timeOutErrorPhSensors = 0;
@@ -284,7 +278,6 @@ void Thread_Regulator( void *pvParameters )
 		{
 			g_isNoWater = false;
 			timeOutOfWater = 0;
-			switchPUMP( 1 );
 		}
 		else if( !g_isNoWater )
 		{
@@ -292,7 +285,6 @@ void Thread_Regulator( void *pvParameters )
 			if( timeOutOfWater > (MAX_OUT_OF_WATER_SEC * 1000) )
 			{
 				g_isNoWater = true;
-				switchPUMP( 0 );
 				
 				if( !g_isErrRegulator )
 				{
@@ -592,9 +584,6 @@ bool Reg_ToOpen( void )
 	bool isOpenOk = false;
 	
 	int openTime;
-	
-	// Отключаем насос
-	switchPUMP( 0 );
 	
 	if( !Reg_IsError() )
 	{
