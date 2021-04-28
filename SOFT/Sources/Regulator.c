@@ -18,12 +18,14 @@ const TRelDesc Relay[] = {
 	{PORT_REL_PH_PLUS, PIN_REL_PH_PLUS},
 };
 
-const float K_INTEGRAL_DEFAULT = 0.2;
+const float K_INTEGRAL_DEFAULT = 0.03;
 const float K_DIFF_DEFAULT = 0.2;
-const float K_PROP_DEFAULT = 2.0;
+const float K_PROP_DEFAULT = 1.0;
 const uint16_t FULL_MOVE_TIME_SEC_DEFAULT = 20;
 const uint16_t MIN_FULL_MOVE_TIME_SEC = 5;		// минимальное время хода регулятора в секундах
 const uint16_t MAX_FULL_MOVE_TIME_SEC = 120;	// максимальное время хода регулятора в секундах
+
+const TickType_t REGULATOR_CYCLETIME_MS = 1000;			// интервал между циклами регулирования в мс.
 
 //--- GLOBAL VARIABLES -----------
 extern float g_Sensor_PH;					// текущее значение PH с датчиков
@@ -40,7 +42,7 @@ float g_K_PROP;
 
 uint16_t MAX_OUT_OF_WATER_SEC;		// макс. длительность отсуствия воды для аварии (сек.)
 uint16_t MAX_TIME_ERROR_PH_SEC;		// макс. длительность ошибки установки PH (сек.)
-uint16_t FULL_MOVE_TIME_SEC;			// полное время хода регулятора в секундах
+uint16_t FULL_MOVE_TIME_SEC;		// полное время хода регулятора в секундах
 
 //--- FUNCTIONS ------------------
 extern int ReadWorkMode( uint16_t idx );
@@ -177,41 +179,56 @@ void regulator_cycle( float deltaTime )
 	static float prevPh;
 	float errorPh, pidValue;
 	
-	errorPh = g_Setup_PH - g_Sensor_PH;
-
 	if( isFirstPid )
 	{
 		isFirstPid = false;
 		prevPh = g_Sensor_PH;
 	}
+
+	TickType_t xLastWakeTime, regulatorTime;
+	xLastWakeTime = xTaskGetTickCount();
 	
+	errorPh = g_Setup_PH - g_Sensor_PH;
 	pidValue = getPidValue( errorPh, deltaTime, prevPh );
-	
 	prevPh = g_Sensor_PH;
-	
 
 	if( ( errorPh < 0.1 && errorPh > -0.1 ) && 
-		( pidValue < 0.2 && pidValue > -0.2 ))
+		( pidValue < 0.1 && pidValue > -0.1 ))
 	{
 		// здесь мы в пределах допуска, останавливаем регулятор
 		Reg_RelayAllOff();
 		return;
 	}
 	
-	if( pidValue < -0.15 )
+	regulatorTime = fabs( pidValue ) * 1000;
+	if( regulatorTime > (deltaTime * 1000) )
+	{
+		if( deltaTime > 0.1 )
+			regulatorTime = (deltaTime - 0.1) * 1000;
+		else 
+			regulatorTime = 50;
+	}
+	if( regulatorTime < 50 )
+		regulatorTime = 50;
+	
+	
+	if( pidValue < 0 /* -0.15 */ )
 	{
 		Reg_RelayOn( REL_PH_MINUS );
 		Reg_RelayOff( REL_PH_PLUS );
 	}
-	else if( pidValue > 0.15 )
+	else if( pidValue > 0 /* 0.15 */ )
 	{
 		Reg_RelayOff( REL_PH_MINUS );
 		Reg_RelayOn( REL_PH_PLUS );
 	}
-	else
-	{
-		Reg_RelayAllOff();
-	}
+	// Wait for stop
+	vTaskDelayUntil( &xLastWakeTime, regulatorTime );
+	Reg_RelayAllOff();
+//	else
+//	{
+//		Reg_RelayAllOff();
+//	}
 }
 
 
@@ -235,8 +252,6 @@ void Thread_Regulator( void *pvParameters )
 {
 	Reg_Init();
 
-	const TickType_t CYCLETIME_MS = 200;			// интервал между циклами регулирования
-	
 	TickType_t xLastWakeTime;
 	int timeOutOfWater = 0;
 	int timeOutErrorPhValue = 0;
@@ -253,7 +268,7 @@ void Thread_Regulator( void *pvParameters )
 	for(;;)
 	{
 		// Wait for the next cycle.
-		vTaskDelayUntil( &xLastWakeTime, CYCLETIME_MS );
+		vTaskDelayUntil( &xLastWakeTime, REGULATOR_CYCLETIME_MS );
 		
 		if( prevIsRegError && !g_isErrRegulator )
 		{
@@ -281,7 +296,7 @@ void Thread_Regulator( void *pvParameters )
 		}
 		else if( !g_isNoWater )
 		{
-			timeOutOfWater += CYCLETIME_MS;
+			timeOutOfWater += REGULATOR_CYCLETIME_MS;
 			if( timeOutOfWater > (MAX_OUT_OF_WATER_SEC * 1000) )
 			{
 				g_isNoWater = true;
@@ -303,7 +318,7 @@ void Thread_Regulator( void *pvParameters )
 		{
 			if( !g_isErrSensors )
 			{
-				timeOutErrorPhSensors  += CYCLETIME_MS;
+				timeOutErrorPhSensors  += REGULATOR_CYCLETIME_MS;
 				if( timeOutErrorPhSensors > (MAX_OUT_OF_WATER_SEC * 1000) )
 				{
 					g_isErrSensors = true;
@@ -316,14 +331,14 @@ void Thread_Regulator( void *pvParameters )
 			timeOutErrorPhSensors = 0;
 		}
 		
-		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh && !g_isErrRegulator )
-		{
+//		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh && !g_isErrRegulator )
+//		{
 			// при наличии воды и отсутсвии ошибок - регулируем
-			regulator_cycle( (float)CYCLETIME_MS / 1000.0 );
+			regulator_cycle( (float)REGULATOR_CYCLETIME_MS / 1000.0 );
 			
 			if( fabs( g_Sensor_PH - g_Setup_PH ) > 0.5 )
 			{
-				timeOutErrorPhValue += CYCLETIME_MS;
+				timeOutErrorPhValue += REGULATOR_CYCLETIME_MS;
 				if( timeOutErrorPhValue > MAX_TIME_ERROR_PH_SEC * 1000 )
 				{
 					timeOutErrorPhValue = 0;
@@ -334,15 +349,15 @@ void Thread_Regulator( void *pvParameters )
 			{
 				timeOutErrorPhValue = 0;
 			}
-		}
-		else if( !g_isErrRegulator )
-		{
-			// открываем регулятор полностью
-			Reg_RelayOn( REL_PH_PLUS );
-			vTaskDelay( 200 );
-			if( IsCurrent_PH_PLUS() ) 
-				g_isErrRegulator = Reg_ToOpen();
-		}
+//		}
+//		else if( !g_isErrRegulator )
+//		{
+//			// открываем регулятор полностью
+//			Reg_RelayOn( REL_PH_PLUS );
+//			vTaskDelay( 200 );
+//			if( IsCurrent_PH_PLUS() ) 
+//				g_isErrRegulator = Reg_ToOpen();
+//		}
 	}
 }
 

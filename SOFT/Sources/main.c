@@ -545,7 +545,7 @@ void Thread_WORK( void *pvParameters )
 		
 		setupMoveLeds();
 		
-		stopWork = g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh || g_isNoWater;
+//		stopWork = g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh || g_isNoWater;
 		
 		switch( (int)g_WorkMode )
 		{
