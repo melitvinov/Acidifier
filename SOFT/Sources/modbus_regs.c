@@ -56,7 +56,7 @@ extern int ReadWorkMode( uint16_t idx );
 extern int ReadSetupPhValue( uint16_t idx );
 extern bool WriteSetupPhValue( uint16_t idx, uint16_t val );
 
-// Регистры платы универсальных входов
+// Регистры платы подкислителя
 TRegEntry RegEntries[] = 
 {
 	{.addr=0, .idx = 0, .read = readDescReg, .write=0, },

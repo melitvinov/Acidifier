@@ -480,37 +480,10 @@ void setupMoveLeds( void )
 	bool isPhPlusMotorOn = (GPIO_PinRead( PORT_REL_PH_PLUS, PIN_REL_PH_PLUS ) == 0);
 	bool isPhMinusMotorOn = (GPIO_PinRead( PORT_REL_PH_MINUS, PIN_REL_PH_MINUS ) == 0);
 
-	if( !isPhPlusMotorOn )
-	{
-		Led_Off( LED_MOVE_PH_PLUS );
-		Led_Off( LED_STOP_PH_PLUS );
-	}
-	else if( IsCurrent_PH_PLUS() )
-	{
-		Led_On( LED_MOVE_PH_PLUS );
-		Led_Off( LED_STOP_PH_PLUS );
-	}
-	else
-	{
-		Led_Off( LED_MOVE_PH_PLUS );
-		Led_On( LED_STOP_PH_PLUS );
-	}
-	
-	if( !isPhMinusMotorOn )
-	{
-		Led_Off( LED_MOVE_PH_MINUS );
-		Led_Off( LED_STOP_PH_MINUS );
-	}
-	else if( IsCurrent_PH_PLUS() )
-	{
-		Led_On( LED_MOVE_PH_MINUS );
-		Led_Off( LED_STOP_PH_MINUS );
-	}
-	else
-	{
-		Led_Off( LED_MOVE_PH_MINUS );
-		Led_On( LED_STOP_PH_MINUS );
-	}
+	(isPhPlusMotorOn && IsCurrent_PH_PLUS()) 	? 	Led_On( LED_MOVE_PH_PLUS ) 	: Led_Off( LED_MOVE_PH_PLUS );
+	(isPhMinusMotorOn && IsCurrent_PH_MINUS()) 	? 	Led_On( LED_MOVE_PH_MINUS ) : Led_Off( LED_MOVE_PH_MINUS );
+	(isPhPlusMotorOn && !IsCurrent_PH_PLUS()) 	? 	Led_On( LED_STOP_PH_PLUS ) 	: Led_Off( LED_STOP_PH_PLUS );
+	(isPhMinusMotorOn && !IsCurrent_PH_MINUS()) ? 	Led_On( LED_STOP_PH_MINUS ) : Led_Off( LED_STOP_PH_MINUS );
 }
 
 /*******************************************************
@@ -545,7 +518,7 @@ void Thread_WORK( void *pvParameters )
 		
 		setupMoveLeds();
 		
-//		stopWork = g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh || g_isNoWater;
+		stopWork = g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh || g_isNoWater;
 		
 		switch( (int)g_WorkMode )
 		{

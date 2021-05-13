@@ -331,8 +331,8 @@ void Thread_Regulator( void *pvParameters )
 			timeOutErrorPhSensors = 0;
 		}
 		
-//		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh && !g_isErrRegulator )
-//		{
+		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh && !g_isErrRegulator )
+		{
 			// при наличии воды и отсутсвии ошибок - регулируем
 			regulator_cycle( (float)REGULATOR_CYCLETIME_MS / 1000.0 );
 			
@@ -349,15 +349,15 @@ void Thread_Regulator( void *pvParameters )
 			{
 				timeOutErrorPhValue = 0;
 			}
-//		}
-//		else if( !g_isErrRegulator )
-//		{
-//			// открываем регулятор полностью
-//			Reg_RelayOn( REL_PH_PLUS );
-//			vTaskDelay( 200 );
-//			if( IsCurrent_PH_PLUS() ) 
-//				g_isErrRegulator = Reg_ToOpen();
-//		}
+		}
+		else if( !g_isErrRegulator )
+		{
+			// открываем регулятор полностью
+			Reg_RelayOn( REL_PH_PLUS );
+			vTaskDelay( 200 );
+			if( IsCurrent_PH_PLUS() ) 
+				g_isErrRegulator = Reg_ToOpen();
+		}
 	}
 }
 
