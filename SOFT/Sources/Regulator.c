@@ -20,12 +20,12 @@ const TRelDesc Relay[] = {
 
 const float K_INTEGRAL_DEFAULT = 0.03;
 const float K_DIFF_DEFAULT = 0.2;
-const float K_PROP_DEFAULT = 1.0;
+const float K_PROP_DEFAULT = 10.0;
 const uint16_t FULL_MOVE_TIME_SEC_DEFAULT = 20;
 const uint16_t MIN_FULL_MOVE_TIME_SEC = 5;		// минимальное время хода регулятора в секундах
 const uint16_t MAX_FULL_MOVE_TIME_SEC = 120;	// максимальное время хода регулятора в секундах
 
-const TickType_t REGULATOR_CYCLETIME_MS = 1000;			// интервал между циклами регулирования в мс.
+const TickType_t REGULATOR_CYCLETIME_MS = 4000;	// интервал между циклами регулирования в мс.
 
 //--- GLOBAL VARIABLES -----------
 extern float g_Sensor_PH;					// текущее значение PH с датчиков
@@ -189,6 +189,9 @@ void regulator_cycle( float deltaTime )
 	xLastWakeTime = xTaskGetTickCount();
 	
 	errorPh = g_Setup_PH - g_Sensor_PH;
+	
+	
+/*	
 	pidValue = getPidValue( errorPh, deltaTime, prevPh );
 	prevPh = g_Sensor_PH;
 
@@ -212,23 +215,41 @@ void regulator_cycle( float deltaTime )
 		regulatorTime = 50;
 	
 	
-	if( pidValue < 0 /* -0.15 */ )
+	if( pidValue < 0 )
 	{
 		Reg_RelayOn( REL_PH_MINUS );
 		Reg_RelayOff( REL_PH_PLUS );
 	}
-	else if( pidValue > 0 /* 0.15 */ )
+	else if( pidValue > 0 )
 	{
 		Reg_RelayOff( REL_PH_MINUS );
 		Reg_RelayOn( REL_PH_PLUS );
 	}
+*/	
+	uint16_t K = g_K_PROP * fabs(errorPh);
+	
+	if( K > K_PROP_DEFAULT )
+	{
+		K = K_PROP_DEFAULT;
+	}
+	
+	regulatorTime = K * 333;
+	
+	if( K > 0 && errorPh < 0 )
+	{
+		// Здесь надо подкислять
+		Reg_RelayOn( REL_PH_MINUS );
+		Reg_RelayOff( REL_PH_PLUS );
+	}
+	else if( K > 0 && errorPh > 0 )
+	{
+		Reg_RelayOff( REL_PH_MINUS );
+		Reg_RelayOn( REL_PH_PLUS );
+	}
+	
 	// Wait for stop
 	vTaskDelayUntil( &xLastWakeTime, regulatorTime );
 	Reg_RelayAllOff();
-//	else
-//	{
-//		Reg_RelayAllOff();
-//	}
 }
 
 
