@@ -11,12 +11,15 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#include "stdio.h"
+
 #include "Leds.h"
 #include "AddrSwitch.h"
 #include "AnaInputs.h"
 #include "Modbus.h"
 #include "leds-dig.h"
 #include "Regulator.h"
+#include "Rs485.h"
 
 // --- TYPES ---------------------
 
@@ -43,9 +46,71 @@ bool g_isDblBtnPressed;
 bool g_isEscPressed;
 bool g_isEscClick;
 
+int g_WaterCounter;
+
 //--- IRQ ------------------------
+void EXTI15_10_IRQHandler()
+{
+	/* Make sure that interrupt flag is set */
+	if( EXTI_GetITStatus(EXTI_Line11) != RESET ) 
+	{
+		/* Clear interrupt flag */
+		EXTI_ClearITPendingBit(EXTI_Line11);
+
+		g_WaterCounter++;
+	}    
+	
+	EXTI_ClearFlag(EXTI_Line11);
+	
+	__asm("nop");
+	__asm("nop");
+	__asm("nop");
+	__asm("nop");
+}
 
 //--- FUNCTIONS ------------------
+void Init_EXTI(void)
+{
+	EXTI_InitTypeDef EXTI_InitStruct;
+	NVIC_InitTypeDef NVIC_InitStruct;
+	
+	/* Enable clock for AFIO */
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
+	
+	/* Set pin as input */
+	// Вход скорости ветра
+	GPIO_PinConfigure( PORT_SENS_WATER, PIN_SENS_WATER, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
+	
+	/* Add IRQ vector to NVIC */
+	/* PB11 is connected to EXTI_Line11, which has EXTI4_IRQn vector */
+	NVIC_InitStruct.NVIC_IRQChannel = EXTI4_IRQn;
+	/* Set priority */
+	NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0x00;
+	/* Set sub priority */
+	NVIC_InitStruct.NVIC_IRQChannelSubPriority = 0x00;
+	/* Enable interrupt */
+	NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
+	/* Add to NVIC */
+	NVIC_Init(&NVIC_InitStruct);
+
+	/* Tell system that you will use PB0 for EXTI_Line0 */
+	GPIO_EXTILineConfig(GPIO_PortSourceGPIOB, GPIO_PinSource11);
+
+	/* PB11 is connected to EXTI_Line11 */
+	EXTI_InitStruct.EXTI_Line = EXTI_Line11;
+	/* Enable interrupt */
+	EXTI_InitStruct.EXTI_LineCmd = ENABLE;
+	/* Interrupt mode */
+	EXTI_InitStruct.EXTI_Mode = EXTI_Mode_Interrupt;
+	/* Triggers on rising and falling edge */
+	EXTI_InitStruct.EXTI_Trigger = EXTI_Trigger_Rising;
+	/* Add to EXTI */
+	EXTI_Init(&EXTI_InitStruct);
+
+	NVIC_EnableIRQ(EXTI15_10_IRQn);	//Разрешаем прерывание в контроллере прерываний	
+}
+
+
 void Thread_WORK( void *pvParameters );
 
 void switchPUMP( uint8_t on )
@@ -158,10 +223,6 @@ void Thread_Buttons( void *pvParameters )
 	bool skipNextUpMinus = false;
 	bool skipDblButtons = false;
 	
-	GPIO_PinConfigure( PORT_BTN_PLUS, PIN_BTN_PLUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
-	GPIO_PinConfigure( PORT_BTN_MINUS, PIN_BTN_MINUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
-	GPIO_PinConfigure( PORT_BTN_ESC, PIN_BTN_ESC, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
-	
 	for(;;)
 	{
 		isBtnPlusPressedNow = _isBtnPlusPressed();
@@ -267,6 +328,13 @@ void Thread_Buttons( void *pvParameters )
 	}
 }
 
+void Buttons_init( void )
+{
+	GPIO_PinConfigure( PORT_BTN_PLUS, PIN_BTN_PLUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
+	GPIO_PinConfigure( PORT_BTN_MINUS, PIN_BTN_MINUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
+	GPIO_PinConfigure( PORT_BTN_ESC, PIN_BTN_ESC, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
+}
+
 /*******************************************************
 Функция		: Инициализация приложения
 Параметр 1	: нет
@@ -276,8 +344,80 @@ void Initialize()
 {
 	Leds_init();
 	ADRSW_init();
-
+	Buttons_init();
+	
 	g_DeviceAddr = 0;
+}
+
+void set_StartCalibrateState( uint8_t * pstepNum )
+{
+	Reg_ToOpen();
+	Reg_RelayAllOff();
+	LcdDig_PrintPH( 0, SideLEFT, false );
+	LcdDig_PrintPH( 0, SideRIGHT, false );
+	*pstepNum = 0;
+	RS485_SendString("\r\n--- Start calibrating --->\r\n");
+}
+
+/*******************************************************
+Поток		: Рабочий поток устройства
+Параметр 1	: не используется
+Возвр. знач.: бесконечный цикл
+********************************************************/
+void Thread_RegulatorCalibrate( void *pvParameters )
+{
+	const uint16_t STEP_MS = 300;
+	uint8_t stepNum = 0;
+	float litres_by_minute;
+	char szLog[50];
+	
+	Rs485_Init();
+	
+	vTaskDelay(5000);
+	Reg_Init();
+	
+	Init_EXTI();
+	
+	set_StartCalibrateState( &stepNum );
+	
+	for(;;)
+	{
+		vTaskDelay( 100 );
+		if( _isBtnPlusPressed() )
+		{
+			stepNum++;
+			LcdDig_PrintUInt( stepNum, SideLEFT, true );
+			LcdDig_PrintPH( -1, SideRIGHT, false );
+			
+			Reg_RelayOn( REL_PH_MINUS );
+			vTaskDelay( STEP_MS );
+			Reg_RelayAllOff();
+			
+			g_WaterCounter = 0;
+			
+			vTaskDelay( 3000 );
+			
+			litres_by_minute = g_WaterCounter * 20;
+			litres_by_minute /= 530.0;
+			
+			LcdDig_PrintUInt( stepNum, SideLEFT, false );
+			sprintf( szLog, "%u\t%.2f\r\n", stepNum, litres_by_minute );
+			RS485_SendString( szLog );
+			
+			if( litres_by_minute < 10 )
+			{
+				litres_by_minute = (roundf( litres_by_minute * 10.0 )) / 10.0;
+				LcdDig_PrintPH( litres_by_minute, SideRIGHT, false );
+			}
+			else
+				LcdDig_PrintUInt( (uint8_t) litres_by_minute, SideRIGHT, false );
+		}
+		if( _isBtnMinusPressed() )
+		{
+			set_StartCalibrateState( &stepNum );
+		}
+		
+	}
 }
 
 /*******************************************************
@@ -288,20 +428,28 @@ void Initialize()
 int main(void)
 {
 	Initialize();
-
-	xTaskCreate( CheckAddrChange, (const char*)"ADDRESS", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
-
-	xTaskCreate( AInp_Thread, (const char*)"ANALOG", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
-
-	xTaskCreate( MBUS_Thread, (const char*)"Modbus", 0x1000,	( void * ) NULL, ( tskIDLE_PRIORITY + 2 ), NULL);
-
-	xTaskCreate( Thread_Leds_Dig, (const char*)"LedsDig", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 	
-	xTaskCreate( Thread_Regulator, (const char*)"Regulator", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
-	
-	xTaskCreate( Thread_Buttons, (const char*)"BTN", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+	if( _isBtnEscPressed() )
+	{
+		xTaskCreate( Thread_Leds_Dig, (const char*)"LedsDig", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+		xTaskCreate( Thread_RegulatorCalibrate, (const char*)"CALIBRATE", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+	}
+	else
+	{
+		xTaskCreate( CheckAddrChange, (const char*)"ADDRESS", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
-	xTaskCreate( Thread_WORK, (const char*)"WORK", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+		xTaskCreate( AInp_Thread, (const char*)"ANALOG", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+
+		xTaskCreate( MBUS_Thread, (const char*)"Modbus", 0x1000,	( void * ) NULL, ( tskIDLE_PRIORITY + 2 ), NULL);
+
+		xTaskCreate( Thread_Leds_Dig, (const char*)"LedsDig", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+		
+		xTaskCreate( Thread_Regulator, (const char*)"Regulator", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+		
+		xTaskCreate( Thread_Buttons, (const char*)"BTN", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+
+		xTaskCreate( Thread_WORK, (const char*)"WORK", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+	}
 	
 	/* Start the scheduler. */
 	vTaskStartScheduler();

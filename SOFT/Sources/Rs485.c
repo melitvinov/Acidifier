@@ -145,4 +145,19 @@ void RS485_SendBuf( TPacketBuffer * buffer )
 	prvRs485_ToRead();
 }
 
+void RS485_SendString( char * szString )
+{
+	if( !szString )
+		return;
+	
+	prvRs485_ToWrite();
+	
+	while( *szString != 0 )
+	{
+		prvUsart1_Send( *szString );
+		szString++;
+	}
+
+	prvRs485_ToRead();
+}
 

@@ -37,6 +37,10 @@ typedef struct _relay_desc
 
 //--- FUNCTIONS ------------------
 void Reg_Init(void);
+bool Reg_ToOpen( void );
+void Reg_RelayOn(uint8_t indx);
+void Reg_RelayOff(uint8_t indx);
+void Reg_RelayAllOff(void);
 
 void Thread_Regulator( void *pvParameters );
 

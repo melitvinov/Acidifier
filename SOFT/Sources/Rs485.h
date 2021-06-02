@@ -25,5 +25,6 @@
 
 void Rs485_Init(void);
 void RS485_SendBuf( TPacketBuffer * buffer );
+void RS485_SendString( char * szString );
 
 #endif

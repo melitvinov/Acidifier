@@ -25,7 +25,7 @@ const uint16_t FULL_MOVE_TIME_SEC_DEFAULT = 20;
 const uint16_t MIN_FULL_MOVE_TIME_SEC = 5;		// минимальное время хода регулятора в секундах
 const uint16_t MAX_FULL_MOVE_TIME_SEC = 120;	// максимальное время хода регулятора в секундах
 
-const TickType_t REGULATOR_CYCLETIME_MS = 1000;			// интервал между циклами регулирования в мс.
+const TickType_t REGULATOR_CYCLETIME_MS = 4000;			// интервал между циклами регулирования в мс.
 
 //--- GLOBAL VARIABLES -----------
 extern float g_Sensor_PH;					// текущее значение PH с датчиков
