@@ -11,28 +11,34 @@
 #include "Leds.h"
 #include "AnaInputs.h"
 #include "leds-dig.h"
+#include "Rs485.h"
 
+//#define WRITE_LOG
+
+#ifdef WRITE_LOG
+	char szLog[250];
+#endif
 //--- CONSTANTS ------------------
+/*
 const TRelDesc Relay[] = {
 	{PORT_REL_PH_MINUS, PIN_REL_PH_MINUS},
 	{PORT_REL_PH_PLUS, PIN_REL_PH_PLUS},
 };
+*/
 
-const float K_INTEGRAL_DEFAULT = 0.03;
-const float K_DIFF_DEFAULT = 0.2;
-const float K_PROP_DEFAULT = 1.0;
-const uint16_t FULL_MOVE_TIME_SEC_DEFAULT = 20;
-const uint16_t MIN_FULL_MOVE_TIME_SEC = 5;		// минимальное время хода регулятора в секундах
-const uint16_t MAX_FULL_MOVE_TIME_SEC = 120;	// максимальное время хода регулятора в секундах
-
-const TickType_t REGULATOR_CYCLETIME_MS = 4000;			// интервал между циклами регулирования в мс.
+const float K_INTEGRAL_DEFAULT = 0.01;
+const float K_DIFF_DEFAULT = 1.0;
+const float K_PROP_DEFAULT = 5.0;
+const uint16_t REG_CYCLETIME_SEC_DEFAULT = 4;
+const uint16_t MIN_REG_CYCLETIME_SEC = 3;		// минимальный период регулятора в секундах
+const uint16_t MAX_REG_CYCLETIME_SEC = 20;		// максимальный период регулятора в секундах
 
 //--- GLOBAL VARIABLES -----------
 extern float g_Sensor_PH;					// текущее значение PH с датчиков
 extern float g_Setup_PH;					// заданное пользователем значение PH
 
 extern bool g_isNoWater;
-extern bool g_isErrRegulator;
+//extern bool g_isErrRegulator;
 extern bool g_isErrTimeoutSetupPh;
 extern bool g_isErrSensors;
 
@@ -42,15 +48,18 @@ float g_K_PROP;
 
 uint16_t MAX_OUT_OF_WATER_SEC;		// макс. длительность отсуствия воды для аварии (сек.)
 uint16_t MAX_TIME_ERROR_PH_SEC;		// макс. длительность ошибки установки PH (сек.)
-uint16_t FULL_MOVE_TIME_SEC;		// полное время хода регулятора в секундах
+uint16_t REG_CYCLETIME_SEC;			// период регулирования (сек)
+
+int g_RegPercentOn;				// текущее (последнее значение процента открытия регулятора в %)
 
 //--- FUNCTIONS ------------------
+extern void switchKLAPAN( uint8_t on );
 extern int ReadWorkMode( uint16_t idx );
-void Reg_RelayOn(uint8_t indx);
-void Reg_RelayOff(uint8_t indx);
-void Reg_RelayAllOff(void);
-bool Reg_ToOpen( void );
-bool Reg_IsError( void );
+//void Reg_RelayOn(uint8_t indx);
+//void Reg_RelayOff(uint8_t indx);
+//void Reg_RelayAllOff(void);
+//bool Reg_ToOpen( void );
+//bool Reg_IsError( void );
 
 /*******************************************************
 Функция		: Инициализация железа
@@ -60,7 +69,7 @@ bool Reg_IsError( void );
 void Reg_Init(void)
 {
 	GPIO_PinRemapConfig( GPIO_Remap_SWJ_JTAGDisable, ENABLE );
-	
+/*	
 	for( int i=0; i<2; i++ )
 	{
 		// Перевод вывода на выход с открытым коллектором для управления реле
@@ -69,10 +78,11 @@ void Reg_Init(void)
 		// Отключение реле
 		GPIO_PinWrite( Relay[i].GPIOx, Relay[i].pin, REL_OFF );
 	}
-
+	
 	// Перевод вывода на вход с подтяжкой к VCC для токовых датчиков
 	GPIO_PinConfigure( PORT_CURRENT_PH_MINUS, PIN_CURRENT_PH_MINUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
 	GPIO_PinConfigure( PORT_CURRENT_PH_PLUS, PIN_CURRENT_PH_PLUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
+*/
 
 	// Перевод вывода на вход с подтяжкой к VCC для датчика воды
 	GPIO_PinConfigure( PORT_SENS_WATER, PIN_SENS_WATER, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
@@ -122,11 +132,13 @@ void Reg_Init(void)
 		FM24_WriteWords( EEADR_MAX_TIME_ERROR_PH_SEC, &MAX_TIME_ERROR_PH_SEC, 1 );
 	}
 
-	if( !FM24_ReadWords( EEADR_FULL_MOVE_TIME_SEC, &FULL_MOVE_TIME_SEC, 1 ) || FULL_MOVE_TIME_SEC == 0 )
+	if( !FM24_ReadWords( EEADR_REG_CYCLETIME_SEC, &REG_CYCLETIME_SEC, 1 ) || REG_CYCLETIME_SEC == 0 )
 	{
-		FULL_MOVE_TIME_SEC = FULL_MOVE_TIME_SEC_DEFAULT;
-		FM24_WriteWords( EEADR_FULL_MOVE_TIME_SEC, &FULL_MOVE_TIME_SEC, 1 );
+		REG_CYCLETIME_SEC = REG_CYCLETIME_SEC_DEFAULT;
+		FM24_WriteWords( EEADR_REG_CYCLETIME_SEC, &REG_CYCLETIME_SEC, 1 );
 	}
+	
+	g_RegPercentOn = 50;
 }
 
 /*******************************************************
@@ -151,6 +163,7 @@ float getPidValue( float errorPh, float deltaTime, float prevPh )
 /*******************************************************
 	Возвращает состояние концевика реле закрытия
 ********************************************************/
+/*
 bool IsCurrent_PH_MINUS( void )
 {
 	bool isOk;
@@ -158,10 +171,11 @@ bool IsCurrent_PH_MINUS( void )
 	
 	return isOk;
 }
-
+*/
 /*******************************************************
 	Возвращает состояние концевика реле закрытия
 ********************************************************/
+/*
 bool IsCurrent_PH_PLUS( void )
 {
 	bool isOk;
@@ -169,12 +183,15 @@ bool IsCurrent_PH_PLUS( void )
 	
 	return isOk;
 }
-
+*/
 /*******************************************************
 	Один цикл регулирования PH
 ********************************************************/
 void regulator_cycle( float deltaTime )
 {
+#ifdef WRITE_LOG
+	static int iNumCycle = 0;
+#endif
 	static bool isFirstPid = true;
 	static float prevPh;
 	float errorPh, pidValue;
@@ -185,50 +202,41 @@ void regulator_cycle( float deltaTime )
 		prevPh = g_Sensor_PH;
 	}
 
-	TickType_t xLastWakeTime, regulatorTime;
-	xLastWakeTime = xTaskGetTickCount();
-	
 	errorPh = g_Setup_PH - g_Sensor_PH;
 	pidValue = getPidValue( errorPh, deltaTime, prevPh );
 	prevPh = g_Sensor_PH;
 
-	if( ( errorPh < 0.1 && errorPh > -0.1 ) && 
-		( pidValue < 0.1 && pidValue > -0.1 ))
-	{
-		// здесь мы в пределах допуска, останавливаем регулятор
-		Reg_RelayAllOff();
-		return;
-	}
+	int i_delta_percent = roundf( pidValue ) * (-1);
 	
-	regulatorTime = fabs( pidValue ) * 1000;
-	if( regulatorTime > (deltaTime * 1000) )
-	{
-		if( deltaTime > 0.1 )
-			regulatorTime = (deltaTime - 0.1) * 1000;
-		else 
-			regulatorTime = 50;
-	}
-	if( regulatorTime < 50 )
-		regulatorTime = 50;
+	if( i_delta_percent > 10 )
+		i_delta_percent = 10;
+	else if( i_delta_percent < -10 )
+		i_delta_percent = -10;
+
+	g_RegPercentOn += i_delta_percent; 
+	if( g_RegPercentOn > 95 )
+		g_RegPercentOn = 95;
+	else if( g_RegPercentOn < 0 )
+		g_RegPercentOn = 0;
 	
+	TickType_t xStartImpulseTime, impulseTime_ms;
 	
-	if( pidValue < 0 /* -0.15 */ )
+	impulseTime_ms = (REG_CYCLETIME_SEC * 10) * g_RegPercentOn;
+	if( impulseTime_ms < 50 )
+		impulseTime_ms = 0;
+	if( impulseTime_ms > 0 )
 	{
-		Reg_RelayOn( REL_PH_MINUS );
-		Reg_RelayOff( REL_PH_PLUS );
+		xStartImpulseTime = xTaskGetTickCount();
+		switchKLAPAN( 1 );
+		vTaskDelayUntil( &xStartImpulseTime, impulseTime_ms );
 	}
-	else if( pidValue > 0 /* 0.15 */ )
-	{
-		Reg_RelayOff( REL_PH_MINUS );
-		Reg_RelayOn( REL_PH_PLUS );
-	}
-	// Wait for stop
-	vTaskDelayUntil( &xLastWakeTime, regulatorTime );
-	Reg_RelayAllOff();
-//	else
-//	{
-//		Reg_RelayAllOff();
-//	}
+	switchKLAPAN(0);
+
+#ifdef WRITE_LOG
+	sprintf( szLog, "%i\tPID\t%.2f\tdelta_perc\t%i\topen_perc\t%i\timpulseTime_ms\t%.3f\tSetup\t%.1f\tSensor\t%.1f\r\n", ++iNumCycle, pidValue, i_delta_percent, g_RegPercentOn, (((float)impulseTime_ms)/1000.0),
+		g_Setup_PH, g_Sensor_PH	);
+	RS485_SendString( szLog );
+#endif
 }
 
 
@@ -256,32 +264,34 @@ void Thread_Regulator( void *pvParameters )
 	int timeOutOfWater = 0;
 	int timeOutErrorPhValue = 0;
 	int timeOutErrorPhSensors = 0;
-	bool prevIsRegError = false;
+//	bool prevIsRegError = false;
 	bool IsPhSensorsTooDiff;
 
 	vTaskDelay( 1000 );
-	
-	g_isErrRegulator = !Reg_ToOpen();
 	
 	// Initialise the xLastWakeTime variable with the current time.
 	xLastWakeTime = xTaskGetTickCount();
 	for(;;)
 	{
 		// Wait for the next cycle.
-		vTaskDelayUntil( &xLastWakeTime, REGULATOR_CYCLETIME_MS );
+		vTaskDelayUntil( &xLastWakeTime, (REG_CYCLETIME_SEC * 1000) );
 		
-		if( prevIsRegError && !g_isErrRegulator )
-		{
-			// прошел сброс ошибок, надо проверить регулятор
-			g_isErrRegulator = Reg_IsError();
-		}
-		prevIsRegError = g_isErrRegulator;
+//		if( prevIsRegError && !g_isErrRegulator )
+//		{
+//			// прошел сброс ошибок, надо проверить регулятор
+//			g_isErrRegulator = Reg_IsError();
+//		}
+//		prevIsRegError = g_isErrRegulator;
 		
 		if( ReadWorkMode(0) != Mode_RegulatorPh )
 		{
+			/*
 			// ставим максимальный PH (открываем регулятор полностью)
 			Reg_RelayOff( REL_PH_MINUS );
 			Reg_RelayOn( REL_PH_PLUS );
+			*/
+			
+			switchKLAPAN(0); 
 			timeOutErrorPhSensors = 0;
 			timeOutErrorPhValue = 0;
 			timeOutOfWater = 0;
@@ -296,19 +306,19 @@ void Thread_Regulator( void *pvParameters )
 		}
 		else if( !g_isNoWater )
 		{
-			timeOutOfWater += REGULATOR_CYCLETIME_MS;
+			timeOutOfWater += (REG_CYCLETIME_SEC * 1000);
 			if( timeOutOfWater > (MAX_OUT_OF_WATER_SEC * 1000) )
 			{
 				g_isNoWater = true;
 				
-				if( !g_isErrRegulator )
-				{
-					Reg_RelayOn( REL_PH_PLUS );
-					vTaskDelay( 200 );
-					if( IsCurrent_PH_PLUS() )
-						g_isErrRegulator = !Reg_ToOpen();
-					Reg_RelayOff( REL_PH_PLUS );
-				}
+//				if( !g_isErrRegulator )
+//				{
+//					Reg_RelayOn( REL_PH_PLUS );
+//					vTaskDelay( 200 );
+//					if( IsCurrent_PH_PLUS() )
+//						g_isErrRegulator = !Reg_ToOpen();
+//					Reg_RelayOff( REL_PH_PLUS );
+//				}
 			}
 		}
 		
@@ -318,7 +328,7 @@ void Thread_Regulator( void *pvParameters )
 		{
 			if( !g_isErrSensors )
 			{
-				timeOutErrorPhSensors  += REGULATOR_CYCLETIME_MS;
+				timeOutErrorPhSensors  += (REG_CYCLETIME_SEC * 1000);
 				if( timeOutErrorPhSensors > (MAX_OUT_OF_WATER_SEC * 1000) )
 				{
 					g_isErrSensors = true;
@@ -331,14 +341,14 @@ void Thread_Regulator( void *pvParameters )
 			timeOutErrorPhSensors = 0;
 		}
 		
-		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh && !g_isErrRegulator )
+		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh /* && !g_isErrRegulator */ )
 		{
 			// при наличии воды и отсутсвии ошибок - регулируем
-			regulator_cycle( (float)REGULATOR_CYCLETIME_MS / 1000.0 );
+			regulator_cycle( REG_CYCLETIME_SEC );
 			
 			if( fabs( g_Sensor_PH - g_Setup_PH ) > 0.5 )
 			{
-				timeOutErrorPhValue += REGULATOR_CYCLETIME_MS;
+				timeOutErrorPhValue += (REG_CYCLETIME_SEC * 1000);
 				if( timeOutErrorPhValue > MAX_TIME_ERROR_PH_SEC * 1000 )
 				{
 					timeOutErrorPhValue = 0;
@@ -350,13 +360,14 @@ void Thread_Regulator( void *pvParameters )
 				timeOutErrorPhValue = 0;
 			}
 		}
-		else if( !g_isErrRegulator )
+		else /*if( !g_isErrRegulator )*/
 		{
 			// открываем регулятор полностью
-			Reg_RelayOn( REL_PH_PLUS );
-			vTaskDelay( 200 );
-			if( IsCurrent_PH_PLUS() ) 
-				g_isErrRegulator = Reg_ToOpen();
+//			Reg_RelayOn( REL_PH_PLUS );
+//			vTaskDelay( 200 );
+//			if( IsCurrent_PH_PLUS() ) 
+//				g_isErrRegulator = Reg_ToOpen();
+			switchKLAPAN(0);
 		}
 	}
 }
@@ -367,6 +378,7 @@ void Thread_Regulator( void *pvParameters )
 Параметр 1	: индекс реле
 Возвр. знач.: нет
 ********************************************************/
+/*
 void Reg_RelayOn(uint8_t indx)
 {
 	if( indx > 1 )
@@ -374,12 +386,13 @@ void Reg_RelayOn(uint8_t indx)
 	
 	GPIO_PinWrite( Relay[indx].GPIOx, Relay[indx].pin, REL_ON );
 }
-
+*/
 /*******************************************************
 Функция		: Отключает реле по его индексу
 Параметр 1	: индекс реле
 Возвр. знач.: нет
 ********************************************************/
+/*
 void Reg_RelayOff(uint8_t indx)
 {
 	if( indx > 1 )
@@ -387,18 +400,19 @@ void Reg_RelayOff(uint8_t indx)
 	
 	GPIO_PinWrite( Relay[indx].GPIOx, Relay[indx].pin, REL_OFF );
 }
-
+*/
 /*******************************************************
 Функция		: Отключает оба реле
 Параметр 1	: нет
 Возвр. знач.: нет
 ********************************************************/
+/*
 void Reg_RelayAllOff(void)
 {
 	GPIO_PinWrite( Relay[0].GPIOx, Relay[0].pin, REL_OFF );
 	GPIO_PinWrite( Relay[1].GPIOx, Relay[1].pin, REL_OFF );
 }
-
+*/
 /*******************************************************
 	Чтение коэффициентов PID регулятора
 ********************************************************/
@@ -512,9 +526,9 @@ bool Reg_Write_MAX_TIME_ERROR_PH_SEC( uint16_t idx, uint16_t val )
 /*******************************************************
 	Чтение времени хода регуятора PH
 ********************************************************/
-int Reg_Read_FULL_MOVE_TIME_SEC( uint16_t idx )
+int Reg_Read_REG_CYCLETIME_SEC( uint16_t idx )
 {
-	int ivalue = FULL_MOVE_TIME_SEC; 
+	int ivalue = REG_CYCLETIME_SEC; 
 	
 	return ivalue;
 }
@@ -522,17 +536,17 @@ int Reg_Read_FULL_MOVE_TIME_SEC( uint16_t idx )
 /*******************************************************
 	Запись времени хода регуятора PH
 ********************************************************/
-bool Reg_Write_FULL_MOVE_TIME_SEC( uint16_t idx, uint16_t val )
+bool Reg_Write_REG_CYCLETIME_SEC( uint16_t idx, uint16_t val )
 {
-	if( val < MIN_FULL_MOVE_TIME_SEC || val > MAX_FULL_MOVE_TIME_SEC )
+	if( val < MIN_REG_CYCLETIME_SEC || val > MAX_REG_CYCLETIME_SEC )
 		return false;
 	
 	// сохраняем в EEPROM
-	bool isWrited = FM24_WriteWords( EEADR_FULL_MOVE_TIME_SEC, &val, 1 );
+	bool isWrited = FM24_WriteWords( EEADR_REG_CYCLETIME_SEC, &val, 1 );
 
 	if( isWrited )
 	{
-		FULL_MOVE_TIME_SEC = val;
+		REG_CYCLETIME_SEC = val;
 	}
 	
 	return isWrited;
@@ -541,6 +555,7 @@ bool Reg_Write_FULL_MOVE_TIME_SEC( uint16_t idx, uint16_t val )
 /*******************************************************
 	Проверка работоспособности регуятора PH
 ********************************************************/
+/*
 bool Reg_IsError( void )
 {
 	// !!! ВРЕМЕННАЯ ЗАГЛУШКА
@@ -587,10 +602,12 @@ bool Reg_IsError( void )
 	
 	return isError;
 }
+*/
 
 /*******************************************************
 	Попытка полностью открыть регулятор
 ********************************************************/
+/*
 bool Reg_ToOpen( void )
 {
 	// !!! ВРЕМЕННАЯ ЗАГЛУШКА
@@ -634,3 +651,4 @@ bool Reg_ToOpen( void )
 	
 	return isOpenOk;
 }
+*/

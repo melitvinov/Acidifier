@@ -43,7 +43,7 @@ const int LATCH_DELAY_TIME = 20;
 TLedDig g_LedDig[4];	// текущее состояние четырех цифр дисплея
 
 extern bool g_isNoWater;
-extern bool g_isErrRegulator;
+//extern bool g_isErrRegulator;
 extern bool g_isErrTimeoutSetupPh;
 extern bool g_isErrSensors;
 
@@ -242,9 +242,9 @@ void Thread_Leds_Dig( void *pvParameters )
 		LcdDig_refresh( current_blinking_on );
 		
 		// управляем реле тревоги
-		switchALARM( g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh );
+		//switchALARM( g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh );
 	
-		g_isErrRegulator && current_blinking_on ? Led_On( LED_ERR_REGULATOR ) : Led_Off( LED_ERR_REGULATOR );
+		//g_isErrRegulator && current_blinking_on ? Led_On( LED_ERR_REGULATOR ) : Led_Off( LED_ERR_REGULATOR );
 		g_isErrSensors && current_blinking_on ? Led_On( LED_ERR_SENSORS ) : Led_Off( LED_ERR_SENSORS );
 		g_isErrTimeoutSetupPh && current_blinking_on ? Led_On( LED_ERR_SETUP_PH_TIMEOUT ) : Led_Off( LED_ERR_SETUP_PH_TIMEOUT );
 		g_isNoWater && current_blinking_on ? Led_On( LED_NO_WATER ) : Led_Off( LED_NO_WATER );

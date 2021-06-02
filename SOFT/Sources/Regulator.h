@@ -7,6 +7,7 @@
 #define __REGULATOR_H_
 
 //--- INCLUDES -------------------
+#include "stdio.h"
 
 #include "GPIO_STM32F10x.h"
 #include "stm32f10x.h"
@@ -23,11 +24,11 @@
 // --- TYPES ---------------------
 
 //-- Индексы реле
-enum 
-{
-	REL_PH_MINUS = 0,
-	REL_PH_PLUS,
-};
+//enum 
+//{
+//	REL_PH_MINUS = 0,
+//	REL_PH_PLUS,
+//};
 
 typedef struct _relay_desc
 {
@@ -37,10 +38,10 @@ typedef struct _relay_desc
 
 //--- FUNCTIONS ------------------
 void Reg_Init(void);
-bool Reg_ToOpen( void );
-void Reg_RelayOn(uint8_t indx);
-void Reg_RelayOff(uint8_t indx);
-void Reg_RelayAllOff(void);
+//bool Reg_ToOpen( void );
+//void Reg_RelayOn(uint8_t indx);
+//void Reg_RelayOff(uint8_t indx);
+//void Reg_RelayAllOff(void);
 
 void Thread_Regulator( void *pvParameters );
 
@@ -52,10 +53,10 @@ int Reg_Read_MAX_TIME_ERROR_PH_SEC( uint16_t idx );
 bool Reg_Write_MAX_OUT_OF_WATER_SEC( uint16_t idx, uint16_t val );
 bool Reg_Write_MAX_TIME_ERROR_PH_SEC( uint16_t idx, uint16_t val );
 
-int Reg_Read_FULL_MOVE_TIME_SEC( uint16_t idx );
-bool Reg_Write_FULL_MOVE_TIME_SEC( uint16_t idx, uint16_t val );
+int Reg_Read_REG_CYCLETIME_SEC( uint16_t idx );
+bool Reg_Write_REG_CYCLETIME_SEC( uint16_t idx, uint16_t val );
 
-bool IsCurrent_PH_MINUS( void );
-bool IsCurrent_PH_PLUS( void );
+//bool IsCurrent_PH_MINUS( void );
+//bool IsCurrent_PH_PLUS( void );
 
 #endif

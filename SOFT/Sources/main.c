@@ -33,7 +33,7 @@ uint8_t g_DeviceAddr = 0;	// текущий адрес устройства на шине RS-485
 
 EWorkMode g_WorkMode;				// текущий режим работы / отображения
 bool g_isNoWater = false;
-bool g_isErrRegulator = false;
+//bool g_isErrRegulator = false;
 bool g_isErrTimeoutSetupPh = false;
 bool g_isErrSensors = false;
 
@@ -49,12 +49,13 @@ bool g_isEscClick;
 int g_WaterCounter;
 
 //--- IRQ ------------------------
+/*
 void EXTI15_10_IRQHandler()
 {
-	/* Make sure that interrupt flag is set */
+	// Make sure that interrupt flag is set
 	if( EXTI_GetITStatus(EXTI_Line11) != RESET ) 
 	{
-		/* Clear interrupt flag */
+		// Clear interrupt flag
 		EXTI_ClearITPendingBit(EXTI_Line11);
 
 		g_WaterCounter++;
@@ -68,48 +69,49 @@ void EXTI15_10_IRQHandler()
 	__asm("nop");
 }
 
-//--- FUNCTIONS ------------------
 void Init_EXTI(void)
 {
 	EXTI_InitTypeDef EXTI_InitStruct;
 	NVIC_InitTypeDef NVIC_InitStruct;
 	
-	/* Enable clock for AFIO */
+	// Enable clock for AFIO
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
 	
-	/* Set pin as input */
+	// Set pin as input
 	// Вход скорости ветра
 	GPIO_PinConfigure( PORT_SENS_WATER, PIN_SENS_WATER, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
 	
-	/* Add IRQ vector to NVIC */
-	/* PB11 is connected to EXTI_Line11, which has EXTI4_IRQn vector */
+	// Add IRQ vector to NVIC
+	// PB11 is connected to EXTI_Line11, which has EXTI4_IRQn vector
 	NVIC_InitStruct.NVIC_IRQChannel = EXTI4_IRQn;
-	/* Set priority */
+	// Set priority
 	NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0x00;
-	/* Set sub priority */
+	// Set sub priority
 	NVIC_InitStruct.NVIC_IRQChannelSubPriority = 0x00;
-	/* Enable interrupt */
+	// Enable interrupt
 	NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
-	/* Add to NVIC */
+	// Add to NVIC
 	NVIC_Init(&NVIC_InitStruct);
 
-	/* Tell system that you will use PB0 for EXTI_Line0 */
+	// Tell system that you will use PB0 for EXTI_Line0
 	GPIO_EXTILineConfig(GPIO_PortSourceGPIOB, GPIO_PinSource11);
 
-	/* PB11 is connected to EXTI_Line11 */
+	// PB11 is connected to EXTI_Line11
 	EXTI_InitStruct.EXTI_Line = EXTI_Line11;
-	/* Enable interrupt */
+	// Enable interrupt
 	EXTI_InitStruct.EXTI_LineCmd = ENABLE;
-	/* Interrupt mode */
+	// Interrupt mode
 	EXTI_InitStruct.EXTI_Mode = EXTI_Mode_Interrupt;
-	/* Triggers on rising and falling edge */
+	// Triggers on rising and falling edge
 	EXTI_InitStruct.EXTI_Trigger = EXTI_Trigger_Rising;
-	/* Add to EXTI */
+	// Add to EXTI
 	EXTI_Init(&EXTI_InitStruct);
 
 	NVIC_EnableIRQ(EXTI15_10_IRQn);	//Разрешаем прерывание в контроллере прерываний	
 }
+*/
 
+//--- FUNCTIONS ------------------
 
 void Thread_WORK( void *pvParameters );
 
@@ -118,6 +120,11 @@ void switchPUMP( uint8_t on )
 	on > 0 ? Led_On( LED_WORK_OK ) : Led_Off( LED_WORK_OK );
 	
 	GPIO_PinWrite( PORT_PUMP, PIN_PUMP, on );
+}
+void switchKLAPAN( uint8_t on )
+{
+	GPIO_PinWrite( PORT_KLAPAN , PIN_KLAPAN, on );
+	on ? Led_On( LED_MOVE_PH_PLUS )	: Led_Off( LED_MOVE_PH_PLUS );
 }
 
 int ReadWorkMode( uint16_t idx )
@@ -351,8 +358,9 @@ void Initialize()
 
 void set_StartCalibrateState( uint8_t * pstepNum )
 {
-	Reg_ToOpen();
-	Reg_RelayAllOff();
+//	Reg_ToOpen();
+//	Reg_RelayAllOff();
+	switchKLAPAN(0);
 	LcdDig_PrintPH( 0, SideLEFT, false );
 	LcdDig_PrintPH( 0, SideRIGHT, false );
 	*pstepNum = 0;
@@ -364,6 +372,7 @@ void set_StartCalibrateState( uint8_t * pstepNum )
 Параметр 1	: не используется
 Возвр. знач.: бесконечный цикл
 ********************************************************/
+/*
 void Thread_RegulatorCalibrate( void *pvParameters )
 {
 	const uint16_t STEP_MS = 300;
@@ -419,6 +428,7 @@ void Thread_RegulatorCalibrate( void *pvParameters )
 		
 	}
 }
+*/
 
 /*******************************************************
 Функция		: Точка старта приложения
@@ -429,13 +439,13 @@ int main(void)
 {
 	Initialize();
 	
-	if( _isBtnEscPressed() )
-	{
-		xTaskCreate( Thread_Leds_Dig, (const char*)"LedsDig", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
-		xTaskCreate( Thread_RegulatorCalibrate, (const char*)"CALIBRATE", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
-	}
-	else
-	{
+//	if( _isBtnEscPressed() )
+//	{
+//		xTaskCreate( Thread_Leds_Dig, (const char*)"LedsDig", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+//		xTaskCreate( Thread_RegulatorCalibrate, (const char*)"CALIBRATE", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+//	}
+//	else
+//	{
 		xTaskCreate( CheckAddrChange, (const char*)"ADDRESS", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
 		xTaskCreate( AInp_Thread, (const char*)"ANALOG", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
@@ -444,12 +454,12 @@ int main(void)
 
 		xTaskCreate( Thread_Leds_Dig, (const char*)"LedsDig", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 		
-		xTaskCreate( Thread_Regulator, (const char*)"Regulator", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+		xTaskCreate( Thread_Regulator, (const char*)"Regulator", 512,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 		
 		xTaskCreate( Thread_Buttons, (const char*)"BTN", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
 		xTaskCreate( Thread_WORK, (const char*)"WORK", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
-	}
+//	}
 	
 	/* Start the scheduler. */
 	vTaskStartScheduler();
@@ -610,7 +620,7 @@ void display_clearErrors( void )
 // Сброс всех ошибок
 void clearAllErrors( void )
 {
-	g_isErrRegulator = false;
+	//g_isErrRegulator = false;
 	g_isErrTimeoutSetupPh = false;
 	g_isErrSensors = false;
 
@@ -618,11 +628,7 @@ void clearAllErrors( void )
 	display_clearErrors();
 }
 
-void switchALARM( uint8_t on )
-{
-	GPIO_PinWrite( PORT_ALARM , PIN_ALARM, on );
-}
-
+/*
 void setupMoveLeds( void )
 {
 	bool isPhPlusMotorOn = (GPIO_PinRead( PORT_REL_PH_PLUS, PIN_REL_PH_PLUS ) == 0);
@@ -633,7 +639,7 @@ void setupMoveLeds( void )
 	(isPhPlusMotorOn && !IsCurrent_PH_PLUS()) 	? 	Led_On( LED_STOP_PH_PLUS ) 	: Led_Off( LED_STOP_PH_PLUS );
 	(isPhMinusMotorOn && !IsCurrent_PH_MINUS()) ? 	Led_On( LED_STOP_PH_MINUS ) : Led_Off( LED_STOP_PH_MINUS );
 }
-
+*/
 /*******************************************************
 Поток		: Рабочий поток устройства
 Параметр 1	: не используется
@@ -645,8 +651,8 @@ void Thread_WORK( void *pvParameters )
 	bool stopWork, IsPhSensorsTooDiff;
 	
 	// Инициализация выхода тревоги
-	GPIO_PinConfigure( PORT_ALARM, PIN_ALARM, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
-	GPIO_PinWrite( PORT_ALARM, PIN_ALARM, 0 );
+	GPIO_PinConfigure( PORT_KLAPAN, PIN_KLAPAN, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
+	switchKLAPAN( 0 );
 
 	ReadSetupPhValue(0);
 	
@@ -664,9 +670,9 @@ void Thread_WORK( void *pvParameters )
 	{
 		vTaskDelay(50);
 		
-		setupMoveLeds();
+		//setupMoveLeds();
 		
-		stopWork = g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh || g_isNoWater;
+		stopWork = /*g_isErrRegulator ||*/ g_isErrSensors || g_isErrTimeoutSetupPh || g_isNoWater;
 		
 		switch( (int)g_WorkMode )
 		{
