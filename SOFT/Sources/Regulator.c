@@ -13,18 +13,7 @@
 #include "leds-dig.h"
 #include "Rs485.h"
 
-//#define WRITE_LOG
-
-#ifdef WRITE_LOG
-	char szLog[250];
-#endif
 //--- CONSTANTS ------------------
-/*
-const TRelDesc Relay[] = {
-	{PORT_REL_PH_MINUS, PIN_REL_PH_MINUS},
-	{PORT_REL_PH_PLUS, PIN_REL_PH_PLUS},
-};
-*/
 
 const float K_INTEGRAL_DEFAULT = 0.01;
 const float K_DIFF_DEFAULT = 1.0;
@@ -32,6 +21,9 @@ const float K_PROP_DEFAULT = 5.0;
 const uint16_t REG_CYCLETIME_SEC_DEFAULT = 4;
 const uint16_t MIN_REG_CYCLETIME_SEC = 3;		// минимальный период регулятора в секундах
 const uint16_t MAX_REG_CYCLETIME_SEC = 20;		// максимальный период регулятора в секундах
+
+const int MIN_REGIMP_PACK_TIME_MS = 150;			// минимальная длина импульса регулятора в пачке
+const int MIN_REGIMP_ONE_TIME_MS = 50;				// минимальная длина импульса регулятора в пачке
 
 //--- GLOBAL VARIABLES -----------
 extern float g_Sensor_PH;					// текущее значение PH с датчиков
@@ -50,16 +42,18 @@ uint16_t MAX_OUT_OF_WATER_SEC;		// макс. длительность отсуствия воды для аварии 
 uint16_t MAX_TIME_ERROR_PH_SEC;		// макс. длительность ошибки установки PH (сек.)
 uint16_t REG_CYCLETIME_SEC;			// период регулирования (сек)
 
-int g_RegPercentOn;				// текущее (последнее значение процента открытия регулятора в %)
+float g_flRegPercentOn;				// текущее (последнее значение процента открытия регулятора в %)
+float g_PID_Value;					// текущее значение PID
+float g_flDeltaPercent;				// текущее значение уменьшения или увеличения процента открытия
+int g_ImpulseTime_ms;				// длительность открытия клапана в мс.
+float g_PID_IntegralValue = 0;		// накопленный интегральный компонент для расчета PID
+float g_prev_PhValue = 7;			// предыдущее значение Ph  для расчета PID
 
 //--- FUNCTIONS ------------------
 extern void switchKLAPAN( uint8_t on );
 extern int ReadWorkMode( uint16_t idx );
-//void Reg_RelayOn(uint8_t indx);
-//void Reg_RelayOff(uint8_t indx);
-//void Reg_RelayAllOff(void);
-//bool Reg_ToOpen( void );
-//bool Reg_IsError( void );
+
+void Thread_Klapan( void *pvParameters );
 
 /*******************************************************
 Функция		: Инициализация железа
@@ -69,20 +63,6 @@ extern int ReadWorkMode( uint16_t idx );
 void Reg_Init(void)
 {
 	GPIO_PinRemapConfig( GPIO_Remap_SWJ_JTAGDisable, ENABLE );
-/*	
-	for( int i=0; i<2; i++ )
-	{
-		// Перевод вывода на выход с открытым коллектором для управления реле
-		GPIO_PinConfigure( Relay[i].GPIOx, Relay[i].pin, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
-		
-		// Отключение реле
-		GPIO_PinWrite( Relay[i].GPIOx, Relay[i].pin, REL_OFF );
-	}
-	
-	// Перевод вывода на вход с подтяжкой к VCC для токовых датчиков
-	GPIO_PinConfigure( PORT_CURRENT_PH_MINUS, PIN_CURRENT_PH_MINUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
-	GPIO_PinConfigure( PORT_CURRENT_PH_PLUS, PIN_CURRENT_PH_PLUS, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
-*/
 
 	// Перевод вывода на вход с подтяжкой к VCC для датчика воды
 	GPIO_PinConfigure( PORT_SENS_WATER, PIN_SENS_WATER, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
@@ -138,107 +118,19 @@ void Reg_Init(void)
 		FM24_WriteWords( EEADR_REG_CYCLETIME_SEC, &REG_CYCLETIME_SEC, 1 );
 	}
 	
-	g_RegPercentOn = 50;
-}
-
-/*******************************************************
-	Расчет значения PID регулятора
-********************************************************/
-float getPidValue( float errorPh, float deltaTime, float prevPh )
-{
-    float pidValue = 0, integralValue, diffValue;
-	static float prevIntegralValue = 0;
-
-    integralValue = prevIntegralValue + (errorPh * deltaTime);
-    prevIntegralValue = integralValue;
-    integralValue *= g_K_INTEGRAL;
-
-    diffValue = g_K_DIFF * (( g_Sensor_PH - prevPh ) / deltaTime);
-
-    pidValue = g_K_PROP * (errorPh + integralValue + diffValue);
-
-    return pidValue;
-}
-
-/*******************************************************
-	Возвращает состояние концевика реле закрытия
-********************************************************/
-/*
-bool IsCurrent_PH_MINUS( void )
-{
-	bool isOk;
-	isOk = ( GPIO_PinRead( PORT_CURRENT_PH_MINUS, PIN_CURRENT_PH_MINUS ) == 0 );
-	
-	return isOk;
-}
-*/
-/*******************************************************
-	Возвращает состояние концевика реле закрытия
-********************************************************/
-/*
-bool IsCurrent_PH_PLUS( void )
-{
-	bool isOk;
-	isOk = ( GPIO_PinRead( PORT_CURRENT_PH_PLUS, PIN_CURRENT_PH_PLUS ) == 0 );
-	
-	return isOk;
-}
-*/
-/*******************************************************
-	Один цикл регулирования PH
-********************************************************/
-void regulator_cycle( float deltaTime )
-{
-#ifdef WRITE_LOG
-	static int iNumCycle = 0;
-#endif
-	static bool isFirstPid = true;
-	static float prevPh;
-	float errorPh, pidValue;
-	
-	if( isFirstPid )
+	uint16_t ee_percent_on;
+	if( !FM24_ReadWords( EEADR_REG_LAST_REGPOS_VALUE, &ee_percent_on, 1 ) || ee_percent_on > 10000 )
 	{
-		isFirstPid = false;
-		prevPh = g_Sensor_PH;
+		g_flRegPercentOn = 5;
+		ee_percent_on = 500;
+		FM24_WriteWords( EEADR_REG_LAST_REGPOS_VALUE, &ee_percent_on, 1 );
 	}
-
-	errorPh = g_Setup_PH - g_Sensor_PH;
-	pidValue = getPidValue( errorPh, deltaTime, prevPh );
-	prevPh = g_Sensor_PH;
-
-	int i_delta_percent = roundf( pidValue ) * (-1);
-	
-	if( i_delta_percent > 10 )
-		i_delta_percent = 10;
-	else if( i_delta_percent < -10 )
-		i_delta_percent = -10;
-
-	g_RegPercentOn += i_delta_percent; 
-	if( g_RegPercentOn > 95 )
-		g_RegPercentOn = 95;
-	else if( g_RegPercentOn < 0 )
-		g_RegPercentOn = 0;
-	
-	TickType_t xStartImpulseTime, impulseTime_ms;
-	
-	impulseTime_ms = (REG_CYCLETIME_SEC * 10) * g_RegPercentOn;
-	if( impulseTime_ms < 50 )
-		impulseTime_ms = 0;
-	if( impulseTime_ms > 0 )
+	else 
 	{
-		xStartImpulseTime = xTaskGetTickCount();
-		switchKLAPAN( 1 );
-		vTaskDelayUntil( &xStartImpulseTime, impulseTime_ms );
+		g_flRegPercentOn = ee_percent_on;
+		g_flRegPercentOn /= 100.0;
 	}
-	switchKLAPAN(0);
-
-#ifdef WRITE_LOG
-	sprintf( szLog, "%i\tPID\t%.2f\tdelta_perc\t%i\topen_perc\t%i\timpulseTime_ms\t%.3f\tSetup\t%.1f\tSensor\t%.1f\r\n", ++iNumCycle, pidValue, i_delta_percent, g_RegPercentOn, (((float)impulseTime_ms)/1000.0),
-		g_Setup_PH, g_Sensor_PH	);
-	RS485_SendString( szLog );
-#endif
 }
-
 
 /*******************************************************
 	Возвращает состояние датчика протока воды
@@ -252,45 +144,145 @@ bool IsWaterOk( void )
 }
 
 /*******************************************************
+Поток		: Управление клапаном дозации
+Параметр 1	: не используется
+Возвр. знач.: бесконечный цикл
+********************************************************/
+void Thread_Klapan( void *pvParameters )
+{
+	const int MAX_IMP_COUNT_BY_CYCLE = 10;
+	
+	// Initialise the xLastWakeTime variable with the current time.
+	int impHigh_TimeMs, impLow_TimeMs, impCount;
+	float prop_value, integ_value, diff_value, error_ph;
+	uint16_t ee_percent_on;
+	
+	switchKLAPAN(0);
+	g_PID_IntegralValue = 0;
+	g_PID_Value = 0;
+	
+	vTaskDelay( 1000 );
+
+	TickType_t xLastWakeTime = xTaskGetTickCount();
+	for(;;)
+	{
+		while( g_isNoWater || g_isErrSensors || g_isErrTimeoutSetupPh || (ReadWorkMode(0) != Mode_RegulatorPh) )
+		{
+			switchKLAPAN(0);
+			vTaskDelay(50);
+		}
+
+		// при наличии воды и отсутсвии ошибок - регулируем
+		// ошибка Ph
+		error_ph = g_Setup_PH - g_Sensor_PH;
+		// пропорциональный компонент
+		prop_value = g_K_PROP * error_ph;
+		// интегральный компонент
+		integ_value =  g_K_INTEGRAL * error_ph;
+		// добавляем накопленный интегральный компонент
+		integ_value += g_PID_IntegralValue;
+		// сохраняем текущее значение накопленного интегрального компонента
+		g_PID_IntegralValue = integ_value;
+		// дифференциальный компонент
+		diff_value = g_K_DIFF * ( g_Sensor_PH - g_prev_PhValue );
+		// сохраняем текущее значение Ph для будущих расчетов
+		g_prev_PhValue = g_Sensor_PH;
+
+		g_PID_Value = prop_value + integ_value + diff_value;
+		g_PID_Value *= -1.0;
+		
+		g_flRegPercentOn += g_PID_Value;
+		g_flDeltaPercent = g_PID_Value;
+		
+		if( g_flRegPercentOn > 95 )
+			g_flRegPercentOn = 95;
+		if( g_flRegPercentOn < 0 )
+			g_flRegPercentOn = 0;
+
+		ee_percent_on = g_flRegPercentOn * 100;
+		FM24_WriteWords( EEADR_REG_LAST_REGPOS_VALUE, &ee_percent_on, 1 );
+		
+		g_ImpulseTime_ms = (REG_CYCLETIME_SEC * 10) * g_flRegPercentOn;
+		
+		if( g_ImpulseTime_ms > MIN_REGIMP_ONE_TIME_MS )
+		{
+			for( impCount = MAX_IMP_COUNT_BY_CYCLE; impCount>0; impCount-- )
+			{
+				impHigh_TimeMs = g_ImpulseTime_ms / impCount;
+				
+				if( impHigh_TimeMs > MIN_REGIMP_PACK_TIME_MS )
+				{
+					// считаем суммарное время импульсов
+					int iSumImpulseMs = impHigh_TimeMs * impCount;
+					// считаем паузу между импульсами
+					impLow_TimeMs = (((REG_CYCLETIME_SEC * 1000)-100) - iSumImpulseMs) / impCount;
+					if( impLow_TimeMs > MIN_REGIMP_PACK_TIME_MS )
+					{
+						// если все импульсы укладываются в слот времени цикла - выходим
+						break;
+					}
+				}
+			}
+			
+			if( impCount == 0 && (impHigh_TimeMs > MIN_REGIMP_ONE_TIME_MS) )
+			{
+				impCount = 1;
+				impLow_TimeMs = (REG_CYCLETIME_SEC * 1000)-100 - impHigh_TimeMs;
+			}
+			
+			while( impCount-- )
+			{
+				switchKLAPAN(1);
+				vTaskDelay( impHigh_TimeMs );
+				switchKLAPAN(0);
+				if( g_isNoWater || g_isErrSensors || g_isErrTimeoutSetupPh || (ReadWorkMode(0) != Mode_RegulatorPh) )
+					break;
+				vTaskDelay( impLow_TimeMs );
+			}			
+		}
+		else
+		{
+			g_ImpulseTime_ms = 0;
+			switchKLAPAN(0);
+		}
+		
+		// Wait for the next cycle.
+		vTaskDelayUntil( &xLastWakeTime, REG_CYCLETIME_SEC );
+	}
+}
+
+/*******************************************************
 Поток		: Рабочий поток устройства
 Параметр 1	: не используется
 Возвр. знач.: бесконечный цикл
 ********************************************************/
 void Thread_Regulator( void *pvParameters )
 {
-	Reg_Init();
-
+	const int REG_WUp_Time = 50; // время между циклами работы потока в мс.
+	
 	TickType_t xLastWakeTime;
 	int timeOutOfWater = 0;
 	int timeOutErrorPhValue = 0;
 	int timeOutErrorPhSensors = 0;
-//	bool prevIsRegError = false;
 	bool IsPhSensorsTooDiff;
 
-	vTaskDelay( 1000 );
+	Reg_Init();
+
+	g_isNoWater = true;
+
+	vTaskDelay( 5000 );
+
+	xTaskCreate( Thread_Klapan, (const char*)"Klapan", configMINIMAL_STACK_SIZE, ( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 	
 	// Initialise the xLastWakeTime variable with the current time.
 	xLastWakeTime = xTaskGetTickCount();
 	for(;;)
 	{
 		// Wait for the next cycle.
-		vTaskDelayUntil( &xLastWakeTime, (REG_CYCLETIME_SEC * 1000) );
-		
-//		if( prevIsRegError && !g_isErrRegulator )
-//		{
-//			// прошел сброс ошибок, надо проверить регулятор
-//			g_isErrRegulator = Reg_IsError();
-//		}
-//		prevIsRegError = g_isErrRegulator;
-		
+		vTaskDelayUntil( &xLastWakeTime, REG_WUp_Time );
+
 		if( ReadWorkMode(0) != Mode_RegulatorPh )
 		{
-			/*
-			// ставим максимальный PH (открываем регулятор полностью)
-			Reg_RelayOff( REL_PH_MINUS );
-			Reg_RelayOn( REL_PH_PLUS );
-			*/
-			
 			switchKLAPAN(0); 
 			timeOutErrorPhSensors = 0;
 			timeOutErrorPhValue = 0;
@@ -306,19 +298,13 @@ void Thread_Regulator( void *pvParameters )
 		}
 		else if( !g_isNoWater )
 		{
-			timeOutOfWater += (REG_CYCLETIME_SEC * 1000);
+			timeOutOfWater += REG_WUp_Time;
 			if( timeOutOfWater > (MAX_OUT_OF_WATER_SEC * 1000) )
 			{
 				g_isNoWater = true;
-				
-//				if( !g_isErrRegulator )
-//				{
-//					Reg_RelayOn( REL_PH_PLUS );
-//					vTaskDelay( 200 );
-//					if( IsCurrent_PH_PLUS() )
-//						g_isErrRegulator = !Reg_ToOpen();
-//					Reg_RelayOff( REL_PH_PLUS );
-//				}
+				g_PID_IntegralValue = 0;
+				g_PID_Value = 0;
+				g_prev_PhValue = 7;
 			}
 		}
 		
@@ -328,7 +314,7 @@ void Thread_Regulator( void *pvParameters )
 		{
 			if( !g_isErrSensors )
 			{
-				timeOutErrorPhSensors  += (REG_CYCLETIME_SEC * 1000);
+				timeOutErrorPhSensors  += REG_WUp_Time;
 				if( timeOutErrorPhSensors > (MAX_OUT_OF_WATER_SEC * 1000) )
 				{
 					g_isErrSensors = true;
@@ -341,14 +327,11 @@ void Thread_Regulator( void *pvParameters )
 			timeOutErrorPhSensors = 0;
 		}
 		
-		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh /* && !g_isErrRegulator */ )
+		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh )
 		{
-			// при наличии воды и отсутсвии ошибок - регулируем
-			regulator_cycle( REG_CYCLETIME_SEC );
-			
 			if( fabs( g_Sensor_PH - g_Setup_PH ) > 0.5 )
 			{
-				timeOutErrorPhValue += (REG_CYCLETIME_SEC * 1000);
+				timeOutErrorPhValue += REG_WUp_Time;
 				if( timeOutErrorPhValue > MAX_TIME_ERROR_PH_SEC * 1000 )
 				{
 					timeOutErrorPhValue = 0;
@@ -362,11 +345,6 @@ void Thread_Regulator( void *pvParameters )
 		}
 		else /*if( !g_isErrRegulator )*/
 		{
-			// открываем регулятор полностью
-//			Reg_RelayOn( REL_PH_PLUS );
-//			vTaskDelay( 200 );
-//			if( IsCurrent_PH_PLUS() ) 
-//				g_isErrRegulator = Reg_ToOpen();
 			switchKLAPAN(0);
 		}
 	}
@@ -532,6 +510,60 @@ int Reg_Read_REG_CYCLETIME_SEC( uint16_t idx )
 	
 	return ivalue;
 }
+
+/*******************************************************
+	Чтение одного из регистров мониторинга текущего состояния
+********************************************************/
+int Reg_Read_MonitoringValue( uint16_t idx )
+{
+	int ivalue = -1;
+	
+	EMonitoringType type = (EMonitoringType) idx;
+	
+	switch( type )
+	{
+		case MON_IsNoWater:
+			ivalue = g_isNoWater;
+			break;
+		case MON_IsErrSensors:
+			ivalue = g_isErrSensors;
+			break;
+		case MON_IsErrTimeoutSetupPh:
+			ivalue = g_isErrTimeoutSetupPh;
+			break;
+		case MON_PH_Setup:
+			ivalue = g_Setup_PH * 100;
+			break;
+		case MON_PH1_Current:
+			ivalue = g_Sensor_PH * 100;
+			break;
+		case MON_PH2_Current:
+			ivalue = AInp_GetFloatSensorPh(1) * 100;
+			break;
+		
+		case MON_RegPercentOn:
+			ivalue = fabs( roundf( g_flRegPercentOn * 100 ) );
+			break;
+		case MON_PID_Value:
+			ivalue = fabs( g_PID_Value ) * 100;
+			break;
+		case MON_PID_Positive:
+			ivalue = g_PID_Value >= 0 ? 1 : 0; 
+			break;
+		case MON_DeltaPercent:
+			ivalue = fabs( roundf( g_flDeltaPercent * 100 ));
+			break;
+		case MON_DeltaPercentPositive:
+			ivalue = g_flDeltaPercent >= 0 ? 1 : 0; 
+			break;
+		case MON_ImpulseTime_ms:
+			ivalue = abs( g_ImpulseTime_ms );
+			break;
+	}
+	
+	return ivalue;
+}
+
 
 /*******************************************************
 	Запись времени хода регуятора PH

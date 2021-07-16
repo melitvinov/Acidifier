@@ -29,7 +29,7 @@ const TTarPoint DefaultPhTarPoint_1 = {3400, 40};
 const TTarPoint DefaultPhTarPoint_2 = {2000, 70};
 
 //--- GLOBAL VARIABLES -----------
-uint16_t sensorsPH_values[PH_CHANNELS_COUNT];	// в массиве хранятся вычисленные значения датчиков PH (float * 10)
+uint16_t sensorsPH_values[PH_CHANNELS_COUNT];	// в массиве хранятся вычисленные значения датчиков PH (float * 100)
 uint16_t sensorsPH_adc[PH_CHANNELS_COUNT];		// в массиве хранятся оцифрованные значения датчиков PH (0-4095)
 TTarTable Tar_tables[PH_CHANNELS_COUNT];		// в массиве хранятся тарировочные точки для датчиков PH
 
@@ -152,7 +152,7 @@ bool AInp_WritePhTar2( uint16_t idx, uint16_t val )
 float AInp_GetFloatSensorPh( uint8_t idx )
 {
 	float value = AInp_ReadPhValue( idx );
-	value /= 10.0;
+	value /= 100.0;
 	
 	return value;
 }
@@ -256,7 +256,7 @@ void AInp_Thread( void *pvParameters )
 				}
 			}
 			
-			sensorsPH_values[i] =  (uint16_t) currValue;
+			sensorsPH_values[i] =  roundf( currValue * 10 );
 		}
 	}
 }

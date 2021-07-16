@@ -18,6 +18,7 @@
 #define START_REG_TAR_POINT		2000						// номер первого регистра тарировочных точек
 #define START_REG_COEFFICIENT	3000						// номер первого регистра коэффициентов для расчета PidValue
 #define START_REG_TIME_DEFINE	4000						// номер первого регистра таймаутов
+#define START_REG_MONITORING	5000						// номер первого регистра мониторинга текущих параметров
 
 // --- TYPES ---------------------
 

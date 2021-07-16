@@ -8,6 +8,8 @@
 
 //--- INCLUDES -------------------
 #include "stdio.h"
+#include "math.h"
+#include "stdlib.h"
 
 #include "GPIO_STM32F10x.h"
 #include "stm32f10x.h"
@@ -58,5 +60,26 @@ bool Reg_Write_REG_CYCLETIME_SEC( uint16_t idx, uint16_t val );
 
 //bool IsCurrent_PH_MINUS( void );
 //bool IsCurrent_PH_PLUS( void );
+
+typedef enum __monitoring_types
+{
+	MON_IsNoWater	 		= 1,			// флаг - отсутствие воды (0-1)
+	MON_IsErrSensors 		= 2,			// флаг - ошибка датчиков
+	MON_IsErrTimeoutSetupPh	= 3,			// флаг - ошибка регулирования
+
+	MON_PH_Setup			= 4,			// установленное значение PH
+	MON_PH1_Current			= 5,			// текущее значение PH1
+	MON_PH2_Current			= 6,			// текущее значение PH2
+	
+	MON_RegPercentOn 		= 7,			// процент открытия регулятора (0-100)
+	MON_PID_Value 			= 8,			// текущее значение значение PID * 100;
+	MON_PID_Positive 		= 9,			// знак PID ( 1 - плюс, 0 - минус )
+	MON_DeltaPercent 		= 10,			// текущее значение уменьшения или увеличения процента открытия
+	MON_DeltaPercentPositive= 11,			// знак DeltaPercent ( 1 - плюс, 0 - минус )
+	MON_ImpulseTime_ms 		= 12,			// длительность открытия клапана в мс.
+} EMonitoringType;
+
+int Reg_Read_MonitoringValue( uint16_t idx );	// чтение одного из регистров мониторинга текущего состояния
+
 
 #endif

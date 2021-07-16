@@ -454,11 +454,11 @@ int main(void)
 
 		xTaskCreate( Thread_Leds_Dig, (const char*)"LedsDig", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 		
-		xTaskCreate( Thread_Regulator, (const char*)"Regulator", 512,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
-		
 		xTaskCreate( Thread_Buttons, (const char*)"BTN", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
 		xTaskCreate( Thread_WORK, (const char*)"WORK", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+
+		xTaskCreate( Thread_Regulator, (const char*)"Regulator", 512,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 //	}
 	
 	/* Start the scheduler. */
@@ -672,7 +672,7 @@ void Thread_WORK( void *pvParameters )
 		
 		//setupMoveLeds();
 		
-		stopWork = /*g_isErrRegulator ||*/ g_isErrSensors || g_isErrTimeoutSetupPh || g_isNoWater;
+		stopWork = g_isErrSensors || g_isErrTimeoutSetupPh || g_isNoWater;
 		
 		switch( (int)g_WorkMode )
 		{

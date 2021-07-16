@@ -279,6 +279,7 @@ void LcdDig_PrintPH( float valuePH, ELcdSide side, bool isBlink )
 {
 	TLedDig ledDig;
 	int startIndex = side == SideLEFT ? 0 : 2;
+	float disp_valuePH;
 	
 	if( valuePH < 0 )
 	{
@@ -291,11 +292,12 @@ void LcdDig_PrintPH( float valuePH, ELcdSide side, bool isBlink )
 	}
 	else
 	{
-		if( valuePH > 9.9 )
-			valuePH = 9.9;
+		disp_valuePH = roundf( valuePH * 10.0 );
+		if( disp_valuePH > 99 )
+			disp_valuePH = 99;
+		int beforePoint = disp_valuePH / 10;
 		
-		int beforePoint = valuePH;
-		int afterPoint = roundf( ((float)(valuePH - beforePoint)) * 10.0 );
+		int afterPoint = disp_valuePH - (beforePoint * 10);
 		
 		ledDig.isBlinking = isBlink;
 		ledDig.isOn = true;
