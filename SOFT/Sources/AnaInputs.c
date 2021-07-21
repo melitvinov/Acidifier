@@ -25,13 +25,21 @@ const uint8_t ainputs[] =
 const uint8_t PH_CHANNELS_COUNT = sizeof(ainputs) / sizeof( uint8_t );
 
 // тарировочна€ точка по умолчанию дл€ датчиков PH
-const TTarPoint DefaultPhTarPoint_1 = {3400, 40};
-const TTarPoint DefaultPhTarPoint_2 = {2000, 70};
+const TTarPoint DefaultPhTarPoint_1 = {3400, 401};
+const TTarPoint DefaultPhTarPoint_2 = {2000, 701};
 
 //--- GLOBAL VARIABLES -----------
 uint16_t sensorsPH_values[PH_CHANNELS_COUNT];	// в массиве хран€тс€ вычисленные значени€ датчиков PH (float * 100)
 uint16_t sensorsPH_adc[PH_CHANNELS_COUNT];		// в массиве хран€тс€ оцифрованные значени€ датчиков PH (0-4095)
 TTarTable Tar_tables[PH_CHANNELS_COUNT];		// в массиве хран€тс€ тарировочные точки дл€ датчиков PH
+
+const TickType_t xFrequency = 250;				// период опроса датчиков PH в мс.
+const uint16_t AVG_TIME_MS = 5000;				// период усреднени€ значений PH в мс.
+const uint16_t AVG_PH_TABLE_LENGTH = AVG_TIME_MS / xFrequency;		// размер таблиц дл€ усреднени€ PH		
+
+uint16_t Avg_PH_values[PH_CHANNELS_COUNT][AVG_PH_TABLE_LENGTH];	// массив дл€ усреднени€ значений PH (два канала)
+uint16_t avg_ph_Pos[PH_CHANNELS_COUNT];
+uint16_t avg_ph_Cnt[PH_CHANNELS_COUNT];
 
 //--- IRQ ------------------------
 
@@ -197,10 +205,14 @@ void AInp_Thread( void *pvParameters )
 	FM24_Init();
 	
 	TickType_t xLastWakeTime;
-	const TickType_t xFrequency = 500;
+	uint32_t sumPh;
 	
 	// ѕолучаем тарировочные точки из EEPROM
 	memset( &Tar_tables, 0, sizeof(Tar_tables) );
+	avg_ph_Pos[0] = 0;
+	avg_ph_Pos[1] = 0;
+	avg_ph_Cnt[0] = 0;
+	avg_ph_Cnt[1] = 0;
 	
 	bool isTarExists = false;
 
@@ -256,7 +268,17 @@ void AInp_Thread( void *pvParameters )
 				}
 			}
 			
-			sensorsPH_values[i] =  roundf( currValue * 10 );
+			Avg_PH_values[i][avg_ph_Pos[i]] = roundf( currValue /* * 10*/ );
+			if( ++avg_ph_Pos[i] >= AVG_PH_TABLE_LENGTH )
+				avg_ph_Pos[i] = 0;
+			if( avg_ph_Cnt[i] < AVG_PH_TABLE_LENGTH )
+				avg_ph_Cnt[i]++;
+			
+			sumPh = 0;
+			for( int n=0; n<avg_ph_Cnt[i]; n++ )
+				sumPh += Avg_PH_values[i][n];
+			sensorsPH_values[i] = sumPh / avg_ph_Cnt[i];
+			//sensorsPH_values[i] =  roundf( currValue * 10 );
 		}
 	}
 }

@@ -115,18 +115,6 @@ void Init_EXTI(void)
 
 void Thread_WORK( void *pvParameters );
 
-void switchPUMP( uint8_t on )
-{
-	on > 0 ? Led_On( LED_WORK_OK ) : Led_Off( LED_WORK_OK );
-	
-	GPIO_PinWrite( PORT_PUMP, PIN_PUMP, on );
-}
-void switchKLAPAN( uint8_t on )
-{
-	GPIO_PinWrite( PORT_KLAPAN , PIN_KLAPAN, on );
-	on ? Led_On( LED_MOVE_PH_PLUS )	: Led_Off( LED_MOVE_PH_PLUS );
-}
-
 int ReadWorkMode( uint16_t idx )
 {
 	return g_WorkMode;
@@ -356,17 +344,6 @@ void Initialize()
 	g_DeviceAddr = 0;
 }
 
-void set_StartCalibrateState( uint8_t * pstepNum )
-{
-//	Reg_ToOpen();
-//	Reg_RelayAllOff();
-	switchKLAPAN(0);
-	LcdDig_PrintPH( 0, SideLEFT, false );
-	LcdDig_PrintPH( 0, SideRIGHT, false );
-	*pstepNum = 0;
-	RS485_SendString("\r\n--- Start calibrating --->\r\n");
-}
-
 /*******************************************************
 Поток		: Рабочий поток устройства
 Параметр 1	: не используется
@@ -439,27 +416,19 @@ int main(void)
 {
 	Initialize();
 	
-//	if( _isBtnEscPressed() )
-//	{
-//		xTaskCreate( Thread_Leds_Dig, (const char*)"LedsDig", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
-//		xTaskCreate( Thread_RegulatorCalibrate, (const char*)"CALIBRATE", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
-//	}
-//	else
-//	{
-		xTaskCreate( CheckAddrChange, (const char*)"ADDRESS", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+	xTaskCreate( CheckAddrChange, (const char*)"ADDRESS", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
-		xTaskCreate( AInp_Thread, (const char*)"ANALOG", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+	xTaskCreate( AInp_Thread, (const char*)"ANALOG", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
-		xTaskCreate( MBUS_Thread, (const char*)"Modbus", 0x1000,	( void * ) NULL, ( tskIDLE_PRIORITY + 2 ), NULL);
+	xTaskCreate( MBUS_Thread, (const char*)"Modbus", 0x1000,	( void * ) NULL, ( tskIDLE_PRIORITY + 2 ), NULL);
 
-		xTaskCreate( Thread_Leds_Dig, (const char*)"LedsDig", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
-		
-		xTaskCreate( Thread_Buttons, (const char*)"BTN", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+	xTaskCreate( Thread_Leds_Dig, (const char*)"LedsDig", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+	
+	xTaskCreate( Thread_Buttons, (const char*)"BTN", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
-		xTaskCreate( Thread_WORK, (const char*)"WORK", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+	xTaskCreate( Thread_WORK, (const char*)"WORK", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
-		xTaskCreate( Thread_Regulator, (const char*)"Regulator", 512,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
-//	}
+	xTaskCreate( Thread_Regulator, (const char*)"Regulator", 512,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 	
 	/* Start the scheduler. */
 	vTaskStartScheduler();
@@ -652,7 +621,6 @@ void Thread_WORK( void *pvParameters )
 	
 	// Инициализация выхода тревоги
 	GPIO_PinConfigure( PORT_KLAPAN, PIN_KLAPAN, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
-	switchKLAPAN( 0 );
 
 	ReadSetupPhValue(0);
 	
@@ -692,15 +660,11 @@ void Thread_WORK( void *pvParameters )
 			
 				if( stopWork )
 				{
-					// Отключаем насос
-					switchPUMP( 0 );
 					LcdDig_DispBlinkOn( SideLEFT );
 					LcdDig_DispBlinkOff( SideRIGHT );
 				}
 				else
 				{
-					// Включаем насос
-					switchPUMP( 1 );
 					LcdDig_DispBlinkOff( SideLEFT );
 					LcdDig_DispBlinkOff( SideRIGHT );
 				}
@@ -737,8 +701,6 @@ void Thread_WORK( void *pvParameters )
 			
 			case Mode_Calibrating_PH1:
 				
-				// Отключаем насос
-				switchPUMP( 0 );
 				Led_On( LED_TAR_P1 );
 				Led_Off( LED_TAR_P2 );
 

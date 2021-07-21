@@ -15,15 +15,15 @@
 
 //--- CONSTANTS ------------------
 
-const float K_INTEGRAL_DEFAULT = 0.01;
-const float K_DIFF_DEFAULT = 1.0;
-const float K_PROP_DEFAULT = 5.0;
-const uint16_t REG_CYCLETIME_SEC_DEFAULT = 4;
+const float K_INTEGRAL_DEFAULT = 0.25;
+const float K_DIFF_DEFAULT = 3.0;
+const float K_PROP_DEFAULT = 2.0;
+const uint16_t REG_CYCLETIME_SEC_DEFAULT = 5;
 const uint16_t MIN_REG_CYCLETIME_SEC = 3;		// минимальный период регулятора в секундах
 const uint16_t MAX_REG_CYCLETIME_SEC = 20;		// максимальный период регулятора в секундах
 
-const int MIN_REGIMP_PACK_TIME_MS = 150;			// минимальная длина импульса регулятора в пачке
-const int MIN_REGIMP_ONE_TIME_MS = 50;				// минимальная длина импульса регулятора в пачке
+const int MIN_REGIMP_PACK_TIME_MS = 250;			// минимальная длина импульса регулятора в пачке
+const int MIN_REGIMP_ONE_TIME_MS = 100;				// минимальная длина импульса регулятора в пачке
 
 //--- GLOBAL VARIABLES -----------
 extern float g_Sensor_PH;					// текущее значение PH с датчиков
@@ -50,10 +50,31 @@ float g_PID_IntegralValue = 0;		// накопленный интегральный компонент для расчет
 float g_prev_PhValue = 7;			// предыдущее значение Ph  для расчета PID
 
 //--- FUNCTIONS ------------------
-extern void switchKLAPAN( uint8_t on );
 extern int ReadWorkMode( uint16_t idx );
 
 void Thread_Klapan( void *pvParameters );
+
+/*******************************************************
+Функция		: Вкл. / выкл. насоса
+Параметр 1	: нет
+Возвр. знач.: нет
+********************************************************/
+void switchPUMP( uint8_t on )
+{
+	on > 0 ? Led_On( LED_WORK_OK ) : Led_Off( LED_WORK_OK );
+	
+	GPIO_PinWrite( PORT_PUMP, PIN_PUMP, on );
+}
+/*******************************************************
+Функция		: Вкл. / выкл. клапана
+Параметр 1	: нет
+Возвр. знач.: нет
+********************************************************/
+void switchKLAPAN( uint8_t on )
+{
+	GPIO_PinWrite( PORT_KLAPAN , PIN_KLAPAN, on );
+	on ? Led_On( LED_MOVE_PH_PLUS )	: Led_Off( LED_MOVE_PH_PLUS );
+}
 
 /*******************************************************
 Функция		: Инициализация железа
@@ -150,7 +171,7 @@ bool IsWaterOk( void )
 ********************************************************/
 void Thread_Klapan( void *pvParameters )
 {
-	const int MAX_IMP_COUNT_BY_CYCLE = 10;
+	const int MAX_IMP_COUNT_BY_CYCLE = 6;
 	
 	// Initialise the xLastWakeTime variable with the current time.
 	int impHigh_TimeMs, impLow_TimeMs, impCount;
@@ -163,13 +184,16 @@ void Thread_Klapan( void *pvParameters )
 	
 	vTaskDelay( 1000 );
 
-	TickType_t xLastWakeTime = xTaskGetTickCount();
+	TickType_t xLastWakeTime, xCurrTicks, xTickToNextCycle;
 	for(;;)
 	{
-		while( g_isNoWater || g_isErrSensors || g_isErrTimeoutSetupPh || (ReadWorkMode(0) != Mode_RegulatorPh) )
+		xLastWakeTime = xTaskGetTickCount();
+		
+		if( g_isNoWater || g_isErrSensors || g_isErrTimeoutSetupPh || (ReadWorkMode(0) != Mode_RegulatorPh) )
 		{
 			switchKLAPAN(0);
 			vTaskDelay(50);
+			continue;
 		}
 
 		// при наличии воды и отсутсвии ошибок - регулируем
@@ -246,8 +270,19 @@ void Thread_Klapan( void *pvParameters )
 			switchKLAPAN(0);
 		}
 		
+		xCurrTicks = xTaskGetTickCount();
+		
+		if( REG_CYCLETIME_SEC * 1000 > ( xCurrTicks - xLastWakeTime ) )
+		{			
+			xTickToNextCycle = (REG_CYCLETIME_SEC * 1000) - (xCurrTicks - xLastWakeTime);
+		}
+		else
+		{
+			xTickToNextCycle = 10;
+		}
+			
 		// Wait for the next cycle.
-		vTaskDelayUntil( &xLastWakeTime, REG_CYCLETIME_SEC );
+		vTaskDelayUntil( &xLastWakeTime, xTickToNextCycle );
 	}
 }
 
@@ -265,6 +300,8 @@ void Thread_Regulator( void *pvParameters )
 	int timeOutErrorPhValue = 0;
 	int timeOutErrorPhSensors = 0;
 	bool IsPhSensorsTooDiff;
+	bool is_WaterOk_prev = false;
+	bool is_WaterOk_curr;
 
 	Reg_Init();
 
@@ -284,6 +321,7 @@ void Thread_Regulator( void *pvParameters )
 		if( ReadWorkMode(0) != Mode_RegulatorPh )
 		{
 			switchKLAPAN(0); 
+			switchPUMP(0); 
 			timeOutErrorPhSensors = 0;
 			timeOutErrorPhValue = 0;
 			timeOutOfWater = 0;
@@ -291,22 +329,43 @@ void Thread_Regulator( void *pvParameters )
 		}
 		
 		// проверяем наличие воды
-		if( IsWaterOk() )
+		is_WaterOk_curr = IsWaterOk();
+		
+		if( !is_WaterOk_curr )
 		{
-			g_isNoWater = false;
+			// сейчас нет воды
+			switchPUMP( 0 ); // Выключаем насос
+			switchKLAPAN(0);	// Отключаем клапан
+
+			g_isNoWater = true;
 			timeOutOfWater = 0;
+			g_prev_PhValue = g_Sensor_PH;
 		}
-		else if( !g_isNoWater )
+		else 
 		{
-			timeOutOfWater += REG_WUp_Time;
-			if( timeOutOfWater > (MAX_OUT_OF_WATER_SEC * 1000) )
+			// сейчас есть вода
+			if( !is_WaterOk_prev )
 			{
-				g_isNoWater = true;
-				g_PID_IntegralValue = 0;
-				g_PID_Value = 0;
-				g_prev_PhValue = 7;
+				// если перед этим не было воды, обнуляем таймер на включение подачи воды
+				timeOutOfWater = 0;
+			}
+			else if( g_isNoWater )
+			{
+				// если вода есть, но стоит признак что воды нет, проверяем таймер на включение насоса
+				timeOutOfWater += REG_WUp_Time;
+				if( timeOutOfWater > (MAX_OUT_OF_WATER_SEC * 1000) )
+				{
+					switchPUMP( 1 );	// Включаем насос
+					switchKLAPAN(0);	// Отключаем клапан (на всякий случай)
+					
+					g_isNoWater = false;
+					g_PID_IntegralValue = 0;
+					g_PID_Value = 0;
+					//g_prev_PhValue = 7;
+				}
 			}
 		}
+		is_WaterOk_prev = is_WaterOk_curr;
 		
 		// проверяем ошибки по датчикам PH и выводим на дисплей значения PH
 		g_Sensor_PH = AInp_GetSystemPh( &IsPhSensorsTooDiff );
