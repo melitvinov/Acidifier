@@ -49,6 +49,9 @@ int g_ImpulseTime_ms;				// длительность открытия клапана в мс.
 float g_PID_IntegralValue = 0;		// накопленный интегральный компонент для расчета PID
 float g_prev_PhValue = 7;			// предыдущее значение Ph  для расчета PID
 
+const uint16_t TIME_TO_START_REG_SEC = 15;				// время до старта работы регулятора после подачи воды
+int g_TimeToStartReg_ms = TIME_TO_START_REG_SEC * 1000;	// таймер для старта работы регулятора
+
 //--- FUNCTIONS ------------------
 extern int ReadWorkMode( uint16_t idx );
 
@@ -72,8 +75,9 @@ void switchPUMP( uint8_t on )
 ********************************************************/
 void switchKLAPAN( uint8_t on )
 {
-	GPIO_PinWrite( PORT_KLAPAN , PIN_KLAPAN, on );
 	on ? Led_On( LED_MOVE_PH_PLUS )	: Led_Off( LED_MOVE_PH_PLUS );
+	
+	GPIO_PinWrite( PORT_KLAPAN , PIN_KLAPAN, on );
 }
 
 /*******************************************************
@@ -215,17 +219,27 @@ void Thread_Klapan( void *pvParameters )
 		g_PID_Value = prop_value + integ_value + diff_value;
 		g_PID_Value *= -1.0;
 		
-		g_flRegPercentOn += g_PID_Value;
-		g_flDeltaPercent = g_PID_Value;
-		
-		if( g_flRegPercentOn > 95 )
-			g_flRegPercentOn = 95;
-		if( g_flRegPercentOn < 0 )
-			g_flRegPercentOn = 0;
+		if( g_TimeToStartReg_ms <= 0 )
+		{
+			// если таймер на старт регулирования после подачи воды истек, то вычисляем параметры импульсов
+			g_flDeltaPercent = g_PID_Value;
+			g_flRegPercentOn += g_flDeltaPercent;
+			
+			if( g_flRegPercentOn > 95 )
+				g_flRegPercentOn = 95;
+			if( g_flRegPercentOn < 0 )
+				g_flRegPercentOn = 0;
 
-		ee_percent_on = g_flRegPercentOn * 100;
-		FM24_WriteWords( EEADR_REG_LAST_REGPOS_VALUE, &ee_percent_on, 1 );
-		
+			ee_percent_on = g_flRegPercentOn * 100;
+			FM24_WriteWords( EEADR_REG_LAST_REGPOS_VALUE, &ee_percent_on, 1 );
+		}
+		else
+		{
+			// если таймер еще не сработал, то оставляем старое значение длины импульса регулирования
+			g_flDeltaPercent = 0;
+			g_flRegPercentOn = g_flRegPercentOn;
+		}
+
 		g_ImpulseTime_ms = (REG_CYCLETIME_SEC * 10) * g_flRegPercentOn;
 		
 		if( g_ImpulseTime_ms > MIN_REGIMP_ONE_TIME_MS )
@@ -299,6 +313,7 @@ void Thread_Regulator( void *pvParameters )
 	int timeOutOfWater = 0;
 	int timeOutErrorPhValue = 0;
 	int timeOutErrorPhSensors = 0;
+
 	bool IsPhSensorsTooDiff;
 	bool is_WaterOk_prev = false;
 	bool is_WaterOk_curr;
@@ -318,6 +333,9 @@ void Thread_Regulator( void *pvParameters )
 		// Wait for the next cycle.
 		vTaskDelayUntil( &xLastWakeTime, REG_WUp_Time );
 
+		if( g_TimeToStartReg_ms > 0 )
+			g_TimeToStartReg_ms -= REG_WUp_Time;
+		
 		if( ReadWorkMode(0) != Mode_RegulatorPh )
 		{
 			switchKLAPAN(0); 
@@ -340,6 +358,9 @@ void Thread_Regulator( void *pvParameters )
 			g_isNoWater = true;
 			timeOutOfWater = 0;
 			g_prev_PhValue = g_Sensor_PH;
+			
+			// заводим таймер на время задержки регулирования после подачи воды
+			g_TimeToStartReg_ms = TIME_TO_START_REG_SEC * 1000;
 		}
 		else 
 		{
@@ -361,7 +382,7 @@ void Thread_Regulator( void *pvParameters )
 					g_isNoWater = false;
 					g_PID_IntegralValue = 0;
 					g_PID_Value = 0;
-					//g_prev_PhValue = 7;
+					g_TimeToStartReg_ms = TIME_TO_START_REG_SEC * 1000;				
 				}
 			}
 		}

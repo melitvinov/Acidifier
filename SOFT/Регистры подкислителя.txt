@@ -76,6 +76,32 @@ TRegEntry RegEntries[] =
 	// максимальное время в секундах отклонения значения PH от задания PH для остановки регулятора и насоса
 	{.addr=START_REG_TIME_DEFINE+1, .idx = 0, .read = Reg_Read_MAX_TIME_ERROR_PH_SEC, .write=Reg_Write_MAX_TIME_ERROR_PH_SEC },
 	// время хода регулятора в секундах
-	{.addr=START_REG_TIME_DEFINE+2, .idx = 0, .read = Reg_Read_FULL_MOVE_TIME_SEC, .write=Reg_Write_FULL_MOVE_TIME_SEC },
+	{.addr=START_REG_TIME_DEFINE+2, .idx = 0, .read = Reg_Read_REG_CYCLETIME_SEC, .write=Reg_Write_REG_CYCLETIME_SEC },
 	
+	// флаг - отсутствие воды (0-1)
+	{.addr=START_REG_MONITORING+0, .idx = MON_IsNoWater, .read = Reg_Read_MonitoringValue, .write=0 },
+	// флаг - ошибка датчиков
+	{.addr=START_REG_MONITORING+1, .idx = MON_IsErrSensors, .read = Reg_Read_MonitoringValue, .write=0 },
+	// флаг - ошибка регулирования
+	{.addr=START_REG_MONITORING+2, .idx = MON_IsErrTimeoutSetupPh, .read = Reg_Read_MonitoringValue, .write=0 },
+	
+	// установленное значение PH
+	{.addr=START_REG_MONITORING+3, .idx = MON_PH_Setup, .read = Reg_Read_MonitoringValue, .write=0 },
+	// текущее значение PH1
+	{.addr=START_REG_MONITORING+4, .idx = MON_PH1_Current, .read = Reg_Read_MonitoringValue, .write=0 },
+	// текущее значение PH2
+	{.addr=START_REG_MONITORING+5, .idx = MON_PH2_Current, .read = Reg_Read_MonitoringValue, .write=0 },
+	
+	// % открытия регулятора
+	{.addr=START_REG_MONITORING+6, .idx = MON_RegPercentOn, .read = Reg_Read_MonitoringValue, .write=0 },
+	// значение PID * 100;
+	{.addr=START_REG_MONITORING+7, .idx = MON_PID_Value, .read = Reg_Read_MonitoringValue, .write=0 },
+	// знак PID 
+	{.addr=START_REG_MONITORING+8, .idx = MON_PID_Positive, .read = Reg_Read_MonitoringValue, .write=0 },
+	// DeltaPercent;
+	{.addr=START_REG_MONITORING+9, .idx = MON_DeltaPercent, .read = Reg_Read_MonitoringValue, .write=0 },
+	// знак DeltaPercent 
+	{.addr=START_REG_MONITORING+10, .idx = MON_DeltaPercentPositive, .read = Reg_Read_MonitoringValue, .write=0 },
+	// длительность открытия клапана в мс.
+	{.addr=START_REG_MONITORING+11, .idx = MON_ImpulseTime_ms, .read = Reg_Read_MonitoringValue, .write=0 },
 };
