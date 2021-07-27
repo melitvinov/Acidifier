@@ -25,33 +25,23 @@
 
 //-- Порты
 #define PORT_LED_SYS					GPIOC
-#define PORT_LED_WORK_OK				GPIOA
-#define PORT_LED_TAR_P1					GPIOA
-#define PORT_LED_TAR_P2					GPIOA
+#define PORT_LED_WORK_OK				GPIOB
+#define PORT_LED_TAR_P1					GPIOC
+#define PORT_LED_TAR_P2					GPIOC
 #define PORT_LED_NO_WATER				GPIOA
-#define PORT_LED_ERR_REGULATOR			GPIOC
-#define PORT_LED_ERR_SETUP_PH_TIMEOUT	GPIOC
-#define PORT_LED_ERR_SENSORS			GPIOB
-
-#define PORT_LED_MOVE_PH_PLUS			GPIOB
-#define PORT_LED_MOVE_PH_MINUS			GPIOB
-#define PORT_LED_STOP_PH_PLUS			GPIOB
-#define PORT_LED_STOP_PH_MINUS			GPIOB
+#define PORT_LED_ERR_SETUP_PH_TIMEOUT	GPIOA
+#define PORT_LED_ERR_SENSORS			GPIOA
+#define PORT_LED_VALVE					GPIOA
 
 //-- ID выводов
 #define PIN_LED_SYS						3
-#define PIN_LED_WORK_OK					4
+#define PIN_LED_WORK_OK					0
 #define PIN_LED_TAR_P1					5
-#define PIN_LED_TAR_P2					6
-#define PIN_LED_NO_WATER				7
-#define PIN_LED_ERR_REGULATOR			4
-#define PIN_LED_ERR_SETUP_PH_TIMEOUT	5
-#define PIN_LED_ERR_SENSORS				0
-
-#define PIN_LED_MOVE_PH_PLUS			1
-#define PIN_LED_MOVE_PH_MINUS			2
-#define PIN_LED_STOP_PH_PLUS			9
-#define PIN_LED_STOP_PH_MINUS			8
+#define PIN_LED_TAR_P2					4
+#define PIN_LED_NO_WATER				6
+#define PIN_LED_ERR_SETUP_PH_TIMEOUT	4
+#define PIN_LED_ERR_SENSORS				5
+#define PIN_LED_VALVE					7
 
 /*================================================================
 	Описание выходов управления сдвиговыми регистрами для 
@@ -125,35 +115,22 @@
 #define PIN_SENS_WATER  11
 
 /*================================================================
-	Описание выходов управления реле для регулятора
-==================================================================*/
-//#define PORT_REL_PH_PLUS  		GPIOC
-//#define PORT_REL_PH_MINUS 		GPIOC
-
-//#define PIN_REL_PH_PLUS   		9
-//#define PIN_REL_PH_MINUS  		8
-
-/*================================================================
-	Описание входов виртуальных концевиков
-==================================================================*/
-
-//#define PORT_CURRENT_PH_PLUS  	GPIOC
-//#define PORT_CURRENT_PH_MINUS 	GPIOC
-
-//#define PIN_CURRENT_PH_PLUS   	0
-//#define PIN_CURRENT_PH_MINUS  	1
-
-/*================================================================
 	Описание выходов управления насосом
 ==================================================================*/
-#define PORT_PUMP  			GPIOC
-#define PIN_PUMP   			7
+#define PORT_RELAY_PUMP		GPIOC
+#define PIN_RELAY_PUMP		7
 
 /*================================================================
 	Описание выходов управления реле тревоги
 ==================================================================*/
-#define PORT_KLAPAN  		GPIOC
-#define PIN_KLAPAN   		6
+#define PORT_RELAY_ALARM  	GPIOC
+#define PIN_RELAY_ALARM   	6
+
+/*================================================================
+	Описание выходов управления реле клапана
+==================================================================*/
+#define PORT_RELAY_VALVE  	GPIOC
+#define PIN_RELAY_VALVE   	8
 
 /*================================================================
 	Адреса в EEPROM для переменных

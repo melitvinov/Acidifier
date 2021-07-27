@@ -19,21 +19,16 @@
 
 // --- TYPES ---------------------
 
-//-- Индексы светодиодов
+//-- Индексы светодиодов в массиве
 enum 
 {
-	LED_SYS = 0,
-	LED_WORK_OK,
+	LED_WORK_OK = 0,
 	LED_NO_WATER,
-	LED_ERR_REGULATOR,
 	LED_ERR_SETUP_PH_TIMEOUT,
 	LED_ERR_SENSORS,
 	LED_TAR_P1,
 	LED_TAR_P2,
-	LED_MOVE_PH_PLUS,
-	LED_MOVE_PH_MINUS,
-	LED_STOP_PH_PLUS,
-	LED_STOP_PH_MINUS,
+	LED_VALVE
 };
 
 typedef struct __leddesc
@@ -46,10 +41,12 @@ typedef struct __leddesc
 
 void Leds_init(void);
 bool Led_IsOn(uint8_t indx);
-void Led_On(uint8_t indx);
-void Led_Off(uint8_t indx);
+//void Led_On(uint8_t indx);
+//void Led_Off(uint8_t indx);
+void Led_OnOff(uint8_t indx, uint8_t state);
 void Led_Switch(uint8_t indx);
 void Leds_OnAll(void);
 void Leds_OffAll(void);
 
+void LedSYS( uint8_t state ); 
 #endif

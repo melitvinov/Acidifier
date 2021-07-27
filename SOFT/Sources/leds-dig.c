@@ -243,11 +243,10 @@ void Thread_Leds_Dig( void *pvParameters )
 		
 		// управляем реле тревоги
 		//switchALARM( g_isErrRegulator || g_isErrSensors || g_isErrTimeoutSetupPh );
-	
-		//g_isErrRegulator && current_blinking_on ? Led_On( LED_ERR_REGULATOR ) : Led_Off( LED_ERR_REGULATOR );
-		g_isErrSensors && current_blinking_on ? Led_On( LED_ERR_SENSORS ) : Led_Off( LED_ERR_SENSORS );
-		g_isErrTimeoutSetupPh && current_blinking_on ? Led_On( LED_ERR_SETUP_PH_TIMEOUT ) : Led_Off( LED_ERR_SETUP_PH_TIMEOUT );
-		g_isNoWater && current_blinking_on ? Led_On( LED_NO_WATER ) : Led_Off( LED_NO_WATER );
+
+		Led_OnOff( LED_ERR_SENSORS, g_isErrSensors && current_blinking_on );
+		Led_OnOff( LED_ERR_SETUP_PH_TIMEOUT, g_isErrTimeoutSetupPh && current_blinking_on );
+		Led_OnOff( LED_NO_WATER, g_isNoWater && current_blinking_on );
 		
 		current_blinking_on = !current_blinking_on;
 	}

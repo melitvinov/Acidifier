@@ -11,19 +11,12 @@
 
 //--- CONSTANTS ------------------
 const TLedDesc LedArray[] = {
-	{PORT_LED_SYS, PIN_LED_SYS},
 	{PORT_LED_WORK_OK, PIN_LED_WORK_OK},
 	{PORT_LED_NO_WATER, PIN_LED_NO_WATER},
-	{PORT_LED_ERR_REGULATOR, PIN_LED_ERR_REGULATOR},
 	{PORT_LED_ERR_SETUP_PH_TIMEOUT, PIN_LED_ERR_SETUP_PH_TIMEOUT},
 	{PORT_LED_ERR_SENSORS, PIN_LED_ERR_SENSORS},
 	{PORT_LED_TAR_P1, PIN_LED_TAR_P1},
 	{PORT_LED_TAR_P2, PIN_LED_TAR_P2},
-	
-	{PORT_LED_MOVE_PH_PLUS, PIN_LED_MOVE_PH_PLUS},
-	{PORT_LED_MOVE_PH_MINUS, PIN_LED_MOVE_PH_MINUS},
-	{PORT_LED_STOP_PH_PLUS, PIN_LED_STOP_PH_PLUS},
-	{PORT_LED_STOP_PH_MINUS, PIN_LED_STOP_PH_MINUS},
 };
 
 const int LEDS_COUNT = sizeof( LedArray ) / sizeof( TLedDesc );
@@ -50,10 +43,31 @@ void Leds_init(void)
 }
 
 /*******************************************************
+Функция		: включение/выключение светодиода
+Параметр 1	: индекс светодиода
+Возвр. знач.: нет
+********************************************************/
+void Led_OnOff(uint8_t indx, uint8_t state)
+{
+	if( indx >= LEDS_COUNT )
+		return;
+	
+	GPIO_PinWrite( LedArray[indx].GPIOx, LedArray[indx].pin, state );
+}
+
+void LedSYS( uint8_t state )
+{
+	bool bstate = state;
+	
+	GPIO_PinWrite( PORT_LED_SYS, PIN_LED_SYS, !bstate );
+}
+
+/*******************************************************
 Функция		: включение светодиода
 Параметр 1	: номер светодиода
 Возвр. знач.: нет
 ********************************************************/
+/*
 void Led_On(uint8_t indx)
 {
 	if( indx >= LEDS_COUNT )
@@ -61,12 +75,13 @@ void Led_On(uint8_t indx)
 	
 	GPIO_PinWrite( LedArray[indx].GPIOx, LedArray[indx].pin, TO_ON );
 }
-
+*/
 /*******************************************************
 Функция		: отключение светодиода
 Параметр 1	: номер светодиода
 Возвр. знач.: нет
 ********************************************************/
+/*
 void Led_Off(uint8_t indx)
 {
 	if( indx >= LEDS_COUNT )
@@ -74,6 +89,7 @@ void Led_Off(uint8_t indx)
 	
 	GPIO_PinWrite( LedArray[indx].GPIOx, LedArray[indx].pin, TO_OFF );
 }
+*/
 
 /*******************************************************
 Функция		: Возвращает состояние светодиода
@@ -99,10 +115,7 @@ bool Led_IsOn(uint8_t indx)
 ********************************************************/
 void Led_Switch(uint8_t indx)
 {
-    if( Led_IsOn(indx) ) 
-        Led_Off(indx);
-    else
-        Led_On(indx);
+    Led_OnOff(indx, !Led_IsOn(indx) );
 }
 
 /*******************************************************

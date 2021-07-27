@@ -62,22 +62,24 @@ void Thread_Klapan( void *pvParameters );
 Параметр 1	: нет
 Возвр. знач.: нет
 ********************************************************/
-void switchPUMP( uint8_t on )
+void switch_PUMP( uint8_t on )
 {
-	on > 0 ? Led_On( LED_WORK_OK ) : Led_Off( LED_WORK_OK );
+	Led_OnOff( LED_WORK_OK, on );
 	
-	GPIO_PinWrite( PORT_PUMP, PIN_PUMP, on );
+	GPIO_PinWrite( PORT_RELAY_PUMP, PIN_RELAY_PUMP, on );
 }
 /*******************************************************
 Функция		: Вкл. / выкл. клапана
 Параметр 1	: нет
 Возвр. знач.: нет
 ********************************************************/
-void switchKLAPAN( uint8_t on )
+void switch_VALVE( uint8_t on )
 {
-	on ? Led_On( LED_MOVE_PH_PLUS )	: Led_Off( LED_MOVE_PH_PLUS );
+	Led_OnOff( LED_VALVE, on );
 	
-	GPIO_PinWrite( PORT_KLAPAN , PIN_KLAPAN, on );
+	uint8_t state = on > 0 ? 0 : 1;
+
+	GPIO_PinWrite( PORT_RELAY_VALVE , PIN_RELAY_VALVE, state );
 }
 
 /*******************************************************
@@ -93,9 +95,10 @@ void Reg_Init(void)
 	GPIO_PinConfigure( PORT_SENS_WATER, PIN_SENS_WATER, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
 	
 	// Перевод выводов реле насоса и тревоги на выход
-	GPIO_PinConfigure( PORT_PUMP, PIN_PUMP, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
+	GPIO_PinConfigure( PORT_RELAY_PUMP, PIN_RELAY_PUMP, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
 	// Отключение насоса и тревоги
-	GPIO_PinWrite( PORT_PUMP, PIN_PUMP, 0 );
+	switch_PUMP( 0 );
+	switch_VALVE( 0 );
 	
 	// Загружаем коэффициенты для расчета
 	uint16_t Koef[3];
@@ -182,7 +185,7 @@ void Thread_Klapan( void *pvParameters )
 	float prop_value, integ_value, diff_value, error_ph;
 	uint16_t ee_percent_on;
 	
-	switchKLAPAN(0);
+	switch_VALVE(0);
 	g_PID_IntegralValue = 0;
 	g_PID_Value = 0;
 	
@@ -195,7 +198,7 @@ void Thread_Klapan( void *pvParameters )
 		
 		if( g_isNoWater || g_isErrSensors || g_isErrTimeoutSetupPh || (ReadWorkMode(0) != Mode_RegulatorPh) )
 		{
-			switchKLAPAN(0);
+			switch_VALVE(0);
 			vTaskDelay(50);
 			continue;
 		}
@@ -270,9 +273,9 @@ void Thread_Klapan( void *pvParameters )
 			
 			while( impCount-- )
 			{
-				switchKLAPAN(1);
+				switch_VALVE(1);
 				vTaskDelay( impHigh_TimeMs );
-				switchKLAPAN(0);
+				switch_VALVE(0);
 				if( g_isNoWater || g_isErrSensors || g_isErrTimeoutSetupPh || (ReadWorkMode(0) != Mode_RegulatorPh) )
 					break;
 				vTaskDelay( impLow_TimeMs );
@@ -281,7 +284,7 @@ void Thread_Klapan( void *pvParameters )
 		else
 		{
 			g_ImpulseTime_ms = 0;
-			switchKLAPAN(0);
+			switch_VALVE(0);
 		}
 		
 		xCurrTicks = xTaskGetTickCount();
@@ -338,8 +341,8 @@ void Thread_Regulator( void *pvParameters )
 		
 		if( ReadWorkMode(0) != Mode_RegulatorPh )
 		{
-			switchKLAPAN(0); 
-			switchPUMP(0); 
+			switch_VALVE(0); 
+			switch_PUMP(0); 
 			timeOutErrorPhSensors = 0;
 			timeOutErrorPhValue = 0;
 			timeOutOfWater = 0;
@@ -352,8 +355,8 @@ void Thread_Regulator( void *pvParameters )
 		if( !is_WaterOk_curr )
 		{
 			// сейчас нет воды
-			switchPUMP( 0 ); // Выключаем насос
-			switchKLAPAN(0);	// Отключаем клапан
+			switch_PUMP( 0 ); // Выключаем насос
+			switch_VALVE(0);	// Отключаем клапан
 
 			g_isNoWater = true;
 			timeOutOfWater = 0;
@@ -376,8 +379,8 @@ void Thread_Regulator( void *pvParameters )
 				timeOutOfWater += REG_WUp_Time;
 				if( timeOutOfWater > (MAX_OUT_OF_WATER_SEC * 1000) )
 				{
-					switchPUMP( 1 );	// Включаем насос
-					switchKLAPAN(0);	// Отключаем клапан (на всякий случай)
+					switch_PUMP( 1 );	// Включаем насос
+					switch_VALVE(0);	// Отключаем клапан (на всякий случай)
 					
 					g_isNoWater = false;
 					g_PID_IntegralValue = 0;
@@ -425,7 +428,7 @@ void Thread_Regulator( void *pvParameters )
 		}
 		else /*if( !g_isErrRegulator )*/
 		{
-			switchKLAPAN(0);
+			switch_VALVE(0);
 		}
 	}
 }
@@ -615,10 +618,10 @@ int Reg_Read_MonitoringValue( uint16_t idx )
 			ivalue = g_Setup_PH * 100;
 			break;
 		case MON_PH1_Current:
-			ivalue = g_Sensor_PH * 100;
+			ivalue = AInp_ReadPhValue(0);
 			break;
 		case MON_PH2_Current:
-			ivalue = AInp_GetFloatSensorPh(1) * 100;
+			ivalue = AInp_ReadPhValue(1);
 			break;
 		
 		case MON_RegPercentOn:

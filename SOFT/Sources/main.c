@@ -115,6 +115,16 @@ void Init_EXTI(void)
 
 void Thread_WORK( void *pvParameters );
 
+/*******************************************************
+Функция		: Вкл. / выкл. тревоги
+Параметр 1	: нет
+Возвр. знач.: нет
+********************************************************/
+void switch_ALARM( uint8_t on )
+{
+	GPIO_PinWrite( PORT_RELAY_ALARM , PIN_RELAY_ALARM, on );
+}
+
 int ReadWorkMode( uint16_t idx )
 {
 	return g_WorkMode;
@@ -151,32 +161,6 @@ void CheckAddrChange( void *pvParameters )
 		}
 	}
 }
-
-/*******************************************************
-	Функция	переключает режим работы
-********************************************************/
-//void SwitchWorkMode( EWorkMode newWorkMode )
-//{
-//	g_WorkMode = newWorkMode;
-//	
-//	Leds_OffAll();
-//	
-//	switch( g_WorkMode )
-//	{
-//		case Mode_RegulatorPh:
-//			break;
-//			
-//		case Mode_Calibrating_PH1:
-//			Reg_RelayAllOff();
-//			Led_On( LED_TAR_P1 );
-//			break;
-//		
-//		case Mode_Calibrating_PH2:
-//			Reg_RelayAllOff();
-//			Led_On( LED_TAR_P2 );
-//			break;
-//	}
-//}
 
 bool _isBtnPlusPressed( void )
 {
@@ -597,18 +581,6 @@ void clearAllErrors( void )
 	display_clearErrors();
 }
 
-/*
-void setupMoveLeds( void )
-{
-	bool isPhPlusMotorOn = (GPIO_PinRead( PORT_REL_PH_PLUS, PIN_REL_PH_PLUS ) == 0);
-	bool isPhMinusMotorOn = (GPIO_PinRead( PORT_REL_PH_MINUS, PIN_REL_PH_MINUS ) == 0);
-
-	(isPhPlusMotorOn && IsCurrent_PH_PLUS()) 	? 	Led_On( LED_MOVE_PH_PLUS ) 	: Led_Off( LED_MOVE_PH_PLUS );
-	(isPhMinusMotorOn && IsCurrent_PH_MINUS()) 	? 	Led_On( LED_MOVE_PH_MINUS ) : Led_Off( LED_MOVE_PH_MINUS );
-	(isPhPlusMotorOn && !IsCurrent_PH_PLUS()) 	? 	Led_On( LED_STOP_PH_PLUS ) 	: Led_Off( LED_STOP_PH_PLUS );
-	(isPhMinusMotorOn && !IsCurrent_PH_MINUS()) ? 	Led_On( LED_STOP_PH_MINUS ) : Led_Off( LED_STOP_PH_MINUS );
-}
-*/
 /*******************************************************
 Поток		: Рабочий поток устройства
 Параметр 1	: не используется
@@ -620,7 +592,7 @@ void Thread_WORK( void *pvParameters )
 	bool stopWork, IsPhSensorsTooDiff;
 	
 	// Инициализация выхода тревоги
-	GPIO_PinConfigure( PORT_KLAPAN, PIN_KLAPAN, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
+	GPIO_PinConfigure( PORT_RELAY_ALARM, PIN_RELAY_ALARM, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
 
 	ReadSetupPhValue(0);
 	
@@ -628,9 +600,9 @@ void Thread_WORK( void *pvParameters )
 	
 	for( int i=0; i<20; i++ )
 	{
-		Led_On( LED_SYS );
+		LedSYS( 1 );
 		vTaskDelay(100);
-		Led_Off( LED_SYS );
+		LedSYS( 0 );
 		vTaskDelay(100);
 	}
 	
@@ -646,8 +618,10 @@ void Thread_WORK( void *pvParameters )
 		{
 			case Mode_RegulatorPh:
 
-				Led_Off( LED_TAR_P1 );
-				Led_Off( LED_TAR_P2 );
+				switch_ALARM( g_isErrSensors || g_isErrTimeoutSetupPh );
+
+				Led_OnOff( LED_TAR_P1, 0 );
+				Led_OnOff( LED_TAR_P2, 0 );
 
 				g_Sensor_PH = AInp_GetSystemPh( &IsPhSensorsTooDiff );
 
@@ -701,8 +675,10 @@ void Thread_WORK( void *pvParameters )
 			
 			case Mode_Calibrating_PH1:
 				
-				Led_On( LED_TAR_P1 );
-				Led_Off( LED_TAR_P2 );
+				switch_ALARM(0);
+				
+				Led_OnOff( LED_TAR_P1, 1 );
+				Led_OnOff( LED_TAR_P2, 0 );
 
 				ph1 = AInp_GetFloatSensorPh(0);
 				ph2 = AInp_GetFloatSensorPh(1);
@@ -755,10 +731,11 @@ void Thread_WORK( void *pvParameters )
 				break;
 				
 			case Mode_Calibrating_PH2:
-				// Отключаем насос
-				switchPUMP( 0 );
-				Led_On( LED_TAR_P2 );
-				Led_Off( LED_TAR_P1 );
+				
+				switch_ALARM(0);
+
+				Led_OnOff( LED_TAR_P1, 0 );
+				Led_OnOff( LED_TAR_P2, 1 );
 
 				ph1 = AInp_GetFloatSensorPh(0);
 				ph2 = AInp_GetFloatSensorPh(1);

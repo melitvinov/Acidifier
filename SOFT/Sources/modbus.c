@@ -207,7 +207,7 @@ void MBUS_Thread( void *pvParameters )
 
 		if( IsPacketReady )
 		{
-			Led_On(LED_SYS);
+			LedSYS( 1 );
 			
 			TPacketBuffer * answer;
 			answer = Parser( &Mbus_RecvMsg );
@@ -220,7 +220,8 @@ void MBUS_Thread( void *pvParameters )
 			}
 			
 			startReceiveMessages();
-			Led_Off(LED_SYS);
+
+			LedSYS( 0 );
 		}
 	}
 }
