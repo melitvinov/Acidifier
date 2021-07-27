@@ -17,6 +17,7 @@ const TLedDesc LedArray[] = {
 	{PORT_LED_ERR_SENSORS, PIN_LED_ERR_SENSORS},
 	{PORT_LED_TAR_P1, PIN_LED_TAR_P1},
 	{PORT_LED_TAR_P2, PIN_LED_TAR_P2},
+	{PORT_LED_VALVE, PIN_LED_VALVE},
 };
 
 const int LEDS_COUNT = sizeof( LedArray ) / sizeof( TLedDesc );
@@ -35,7 +36,7 @@ void Leds_init(void)
 	for( int i=0; i<LEDS_COUNT; i++ )
 	{
 		// Перевод вывода для светодиода на выход с открытым коллектором
-		GPIO_PinConfigure( LedArray[i].GPIOx, LedArray[i].pin, GPIO_OUT_OPENDRAIN, GPIO_MODE_OUT2MHZ );
+		GPIO_PinConfigure( LedArray[i].GPIOx, LedArray[i].pin, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
 		
 		// Отключение светодиода
 		GPIO_PinWrite( LedArray[i].GPIOx, LedArray[i].pin, TO_OFF );

@@ -96,6 +96,7 @@ void Reg_Init(void)
 	
 	// Перевод выводов реле насоса и тревоги на выход
 	GPIO_PinConfigure( PORT_RELAY_PUMP, PIN_RELAY_PUMP, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
+	GPIO_PinConfigure( PORT_RELAY_VALVE, PIN_RELAY_VALVE, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
 	// Отключение насоса и тревоги
 	switch_PUMP( 0 );
 	switch_VALVE( 0 );
