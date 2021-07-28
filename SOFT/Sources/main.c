@@ -157,6 +157,13 @@ void CheckAddrChange( void *pvParameters )
 			{
 				// адрес устройства изменился, меняем
 				g_DeviceAddr = addr;
+				for( int i=0; i<addr; i++ )
+				{
+					LedSYS( 1 );
+					vTaskDelay(200);
+					LedSYS( 0 );
+					vTaskDelay(200);
+				}
 			}
 		}
 	}
@@ -598,13 +605,13 @@ void Thread_WORK( void *pvParameters )
 	
 	g_WorkMode = Mode_RegulatorPh;
 	
-	for( int i=0; i<20; i++ )
-	{
-		LedSYS( 1 );
-		vTaskDelay(100);
-		LedSYS( 0 );
-		vTaskDelay(100);
-	}
+//	for( int i=0; i<20; i++ )
+//	{
+//		LedSYS( 1 );
+//		vTaskDelay(100);
+//		LedSYS( 0 );
+//		vTaskDelay(100);
+//	}
 	
 	for(;;)
 	{

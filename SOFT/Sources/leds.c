@@ -41,6 +41,12 @@ void Leds_init(void)
 		// Отключение светодиода
 		GPIO_PinWrite( LedArray[i].GPIOx, LedArray[i].pin, TO_OFF );
 	}
+
+	// системный светодиод
+	GPIO_PinConfigure( PORT_LED_SYS, PIN_LED_SYS, GPIO_OUT_OPENDRAIN, GPIO_MODE_OUT2MHZ );
+	
+	// Отключение светодиода
+	LedSYS(0);
 }
 
 /*******************************************************

@@ -15,10 +15,10 @@
 
 //--- CONSTANTS ------------------
 
-const float K_INTEGRAL_DEFAULT = 0.25;
-const float K_DIFF_DEFAULT = 3.0;
-const float K_PROP_DEFAULT = 2.0;
-const uint16_t REG_CYCLETIME_SEC_DEFAULT = 5;
+const float K_INTEGRAL_DEFAULT = 0.15;
+const float K_DIFF_DEFAULT = 10.0;
+const float K_PROP_DEFAULT = 5.0;
+const uint16_t REG_CYCLETIME_SEC_DEFAULT = 6;
 const uint16_t MIN_REG_CYCLETIME_SEC = 3;		// минимальный период регулятора в секундах
 const uint16_t MAX_REG_CYCLETIME_SEC = 20;		// максимальный период регулятора в секундах
 
@@ -94,10 +94,10 @@ void Reg_Init(void)
 	// Перевод вывода на вход с подтяжкой к VCC для датчика воды
 	GPIO_PinConfigure( PORT_SENS_WATER, PIN_SENS_WATER, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
 	
-	// Перевод выводов реле насоса и тревоги на выход
+	// Перевод выводов реле насоса и клапана на выход
 	GPIO_PinConfigure( PORT_RELAY_PUMP, PIN_RELAY_PUMP, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
 	GPIO_PinConfigure( PORT_RELAY_VALVE, PIN_RELAY_VALVE, GPIO_OUT_PUSH_PULL, GPIO_MODE_OUT2MHZ );
-	// Отключение насоса и тревоги
+	// Отключение насоса и клапана
 	switch_PUMP( 0 );
 	switch_VALVE( 0 );
 	
@@ -200,6 +200,7 @@ void Thread_Klapan( void *pvParameters )
 		if( g_isNoWater || g_isErrSensors || g_isErrTimeoutSetupPh || (ReadWorkMode(0) != Mode_RegulatorPh) )
 		{
 			switch_VALVE(0);
+			switch_PUMP(0);
 			vTaskDelay(50);
 			continue;
 		}
@@ -281,6 +282,9 @@ void Thread_Klapan( void *pvParameters )
 					break;
 				vTaskDelay( impLow_TimeMs );
 			}			
+
+			if( g_isNoWater || g_isErrSensors || g_isErrTimeoutSetupPh || (ReadWorkMode(0) != Mode_RegulatorPh) )
+				continue;
 		}
 		else
 		{
