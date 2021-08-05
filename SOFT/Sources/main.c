@@ -24,6 +24,8 @@
 // --- TYPES ---------------------
 
 //--- CONSTANTS ------------------
+const uint16_t UINT_VERSION = 102;
+
 const uint16_t DEFAULT_SETUP_PH = 50;
 const float MIN_VALUE_SETUP_PH = 20;
 const float MAX_VALUE_SETUP_PH = 100;

@@ -14,18 +14,20 @@
 #include "FM24V02.h"
 #include "AnaInputs.h"
 #include "Regulator.h"
+#include "Product_Id.h"
 
 // --- DEFINES -------------------
 
 // --- TYPES ---------------------
 
 //--- CONSTANTS ------------------
+extern const uint16_t UINT_VERSION;
 
 // описательные регистры
 const uint16_t gDescRegs[] = {
-	0xAAAA,	// vendor_id
-	0x0115, // product_id
-	0x0100,	// firmware_version
+	id_Vendor,	// vendor_id
+	id_Acidifier, // product_id
+	0,	// firmware_version
 	0x0000,	// firmware_git_hash_0
 	0x0000,	// firmware_git_hash_1
 	0x0000,	// firmware_git_hash_2
@@ -161,6 +163,9 @@ TRegEntry RegEntries[] =
 
 int readDescReg( uint16_t idx )
 {
+	if( idx == 2 )
+		return UINT_VERSION;
+	
 	return gDescRegs[idx];
 }
 
