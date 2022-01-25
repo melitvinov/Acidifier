@@ -679,6 +679,8 @@ void Thread_WORK( void *pvParameters )
 					clearAllButtons();
 
 					clearAllErrors();
+					
+					g_WorkMode = Mode_RegulatorPh;
 				}
 				break;
 			
