@@ -81,5 +81,6 @@ typedef enum __monitoring_types
 
 int Reg_Read_MonitoringValue( uint16_t idx );	// чтение одного из регистров мониторинга текущего состояния
 
+void Reg_RestartWaterTimer(void);
 
 #endif

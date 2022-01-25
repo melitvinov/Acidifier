@@ -142,7 +142,7 @@
 #define EEADR_MAX_OUT_OF_WATER_SEC	108
 #define EEADR_MAX_TIME_ERROR_PH_SEC	110
 #define EEADR_REG_CYCLETIME_SEC		112
-#define EEADR_REG_LAST_REGPOS_VALUE	114	// последнее значение открытия регулятора в %
+//#define EEADR_REG_LAST_REGPOS_VALUE	114	// последнее значение открытия регулятора в %
 
 #define EEADR_TAR_PH1_P1_ADC		200
 

@@ -606,6 +606,7 @@ void Thread_WORK( void *pvParameters )
 	ReadSetupPhValue(0);
 	
 	g_WorkMode = Mode_RegulatorPh;
+	g_isNoWater = true;
 	
 //	for( int i=0; i<20; i++ )
 //	{
@@ -681,6 +682,7 @@ void Thread_WORK( void *pvParameters )
 					clearAllErrors();
 					
 					g_WorkMode = Mode_RegulatorPh;
+					Reg_RestartWaterTimer();
 				}
 				break;
 			
@@ -737,6 +739,7 @@ void Thread_WORK( void *pvParameters )
 					clearAllButtons();
 					
 					g_WorkMode = Mode_RegulatorPh;
+					Reg_RestartWaterTimer();
 				}
 			
 				break;
@@ -777,21 +780,24 @@ void Thread_WORK( void *pvParameters )
 					LcdDig_DispBlinkOff( SideLEFT | SideRIGHT );
 					
 					g_WorkMode = Mode_RegulatorPh;
+					Reg_RestartWaterTimer();
 				}
 				else if( g_isEscClick )
 				{
 					// Отмена калибровки точки
-
 					// сброс нажатых кнопок
 					clearAllButtons();
 					
 					g_WorkMode = Mode_RegulatorPh;
+					Reg_RestartWaterTimer();
 				}
 				
 				break;
 			
 			default:
 				g_WorkMode = Mode_RegulatorPh;
+				Reg_RestartWaterTimer();
+				break;
 		}
 	}
 }
