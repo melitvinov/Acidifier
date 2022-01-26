@@ -22,15 +22,9 @@
 #define REL_ON	(0) // логический уровень для включения реле
 #define REL_OFF	(1)	// логический уровень для отключения сегмента
 
+#define TIMEOUT_SENSORS_TOO_DIFF_MS		5000 // тайм-аут в мс для ошибки при разнице показаний датчиков PH больше порогового значения	
 
 // --- TYPES ---------------------
-
-//-- Индексы реле
-//enum 
-//{
-//	REL_PH_MINUS = 0,
-//	REL_PH_PLUS,
-//};
 
 typedef struct _relay_desc
 {
@@ -38,28 +32,28 @@ typedef struct _relay_desc
 	uint16_t pin;
 } TRelDesc;
 
+typedef struct _opt_table_point
+{
+	uint16_t ph_setup;
+	uint16_t opt_def;
+	uint16_t opt_calc;
+} TOptTablePoint;
+
 //--- FUNCTIONS ------------------
 void Reg_Init(void);
-//bool Reg_ToOpen( void );
-//void Reg_RelayOn(uint8_t indx);
-//void Reg_RelayOff(uint8_t indx);
-//void Reg_RelayAllOff(void);
 
 void Thread_Regulator( void *pvParameters );
 
 int Reg_ReadCoefficient( uint16_t idx );
 bool Reg_WriteCoefficient( uint16_t idx, uint16_t val );
 
-int Reg_Read_MAX_OUT_OF_WATER_SEC( uint16_t idx );
-int Reg_Read_MAX_TIME_ERROR_PH_SEC( uint16_t idx );
-bool Reg_Write_MAX_OUT_OF_WATER_SEC( uint16_t idx, uint16_t val );
-bool Reg_Write_MAX_TIME_ERROR_PH_SEC( uint16_t idx, uint16_t val );
+int Reg_Read_TIMEOUT_TURN_PUMP_ON_SEC( uint16_t idx );
+int Reg_Read_TIMEOUT_ERROR_PH_SEC( uint16_t idx );
+bool Reg_Write_TIMEOUT_TURN_PUMP_ON_SEC( uint16_t idx, uint16_t val );
+bool Reg_Write_TIMEOUT_ERROR_PH_SEC( uint16_t idx, uint16_t val );
 
 int Reg_Read_REG_CYCLETIME_SEC( uint16_t idx );
 bool Reg_Write_REG_CYCLETIME_SEC( uint16_t idx, uint16_t val );
-
-//bool IsCurrent_PH_MINUS( void );
-//bool IsCurrent_PH_PLUS( void );
 
 typedef enum __monitoring_types
 {

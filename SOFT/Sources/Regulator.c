@@ -30,7 +30,7 @@ extern float g_Sensor_PH;					// текущее значение PH с датчиков
 extern float g_Setup_PH;					// заданное пользователем значение PH
 
 extern bool g_isNoWater;
-bool is_WaterOk_prev = false;
+//bool is_WaterOk_prev = false;
 extern bool g_isErrTimeoutSetupPh;
 extern bool g_isErrSensors;
 
@@ -38,19 +38,24 @@ float g_K_INTEGRAL;
 float g_K_DIFF;
 float g_K_PROP;
 
-uint16_t MAX_OUT_OF_WATER_SEC;		// макс. длительность отсуствия воды для аварии (сек.)
-uint16_t MAX_TIME_ERROR_PH_SEC;		// макс. длительность ошибки установки PH (сек.)
-uint16_t REG_CYCLETIME_SEC;			// период регулирования (сек)
+uint16_t g_TIMEOUT_REGULATOR_ON_SEC;	// задержка включения регулятора и насоса после подачи воды (сек.)
+uint16_t g_TIMEOUT_ERROR_PH_SEC;		// длительность отклонения величины PH от заданного до установки ошибки (сек.)
+uint16_t g_REGULATOR_CYCLETIME_SEC;		// период регулирования (сек)
 
-float g_flRegPercentOn;				// текущее (последнее значение процента открытия регулятора в %)
-float g_PID_Value;					// текущее значение PID
-float g_flDeltaPercent;				// текущее значение уменьшения или увеличения процента открытия
-int g_ImpulseTime_ms;				// длительность открытия клапана в мс.
-float g_PID_IntegralValue = 0;		// накопленный интегральный компонент для расчета PID
-float g_prev_PhValue = 7;			// предыдущее значение Ph  для расчета PID
+float g_flRegPercentOn;					// текущее (последнее значение процента открытия регулятора в %)
+float g_PID_Value;						// текущее значение PID
+float g_flDeltaPercent;					// текущее значение уменьшения или увеличения процента открытия
+int g_ImpulseTime_ms;					// длительность открытия клапана в мс.
+float g_PID_IntegralValue = 0;			// накопленный интегральный компонент для расчета PID
+float g_prev_PhValue = 7;				// предыдущее значение Ph  для расчета PID
 
-//const uint16_t TIME_TO_START_REG_SEC = 15;				// время до старта работы регулятора после подачи воды
-int g_TimeToStartReg_ms;// = TIME_TO_START_REG_SEC * 1000;	// таймер для старта работы регулятора
+int g_TimeToStartReg_ms;				// оставшееся время до начала дозации после включения насоса в мс
+
+// таблица оптимальных начальных значений регулятора для трех ph значений 
+// index 0 - Ph 4..4,99
+// index 1 - Ph 5..5,99
+// index 0 - Ph 6..6,99
+TOptTablePoint g_OptTablePoint[3];		
 
 //--- FUNCTIONS ------------------
 extern int ReadWorkMode( uint16_t idx );
@@ -75,13 +80,35 @@ void switch_PUMP( uint8_t on )
 		g_PID_Value = 0;					// текущее значение PID
 		g_flDeltaPercent = 0;				// текущее значение уменьшения или увеличения процента открытия
 		g_PID_IntegralValue = 0;			// накопленный интегральный компонент для расчета PID
-		g_prev_PhValue = 6;					// предыдущее значение Ph  для расчета PID
+		g_prev_PhValue = g_Sensor_PH;		// предыдущее значение Ph  для расчета PID
 	}
 }
 
-bool isPumpTurnON( void )
+bool IsPumpTurnON( void )
 {
 	bool isOn = GPIO_PinRead( PORT_RELAY_PUMP, PIN_RELAY_PUMP ) == 0 ? false : true;
+	return isOn;
+}
+/*******************************************************
+	Возвращает состояние датчика протока воды
+********************************************************/
+bool IsWaterOk( void )
+{
+	bool isOk;
+	isOk = ( GPIO_PinRead( PORT_SENS_WATER, PIN_SENS_WATER ) == 0 );
+	
+	return isOk;
+}
+
+/*******************************************************
+	Возвращает флаг нужно сейчас регулировать или нет
+********************************************************/
+bool IsRegulatingOn( void )
+{
+	bool isOn;
+	
+	isOn = (!g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh && (g_TimeToStartReg_ms <= 0) );
+	
 	return isOn;
 }
 
@@ -96,7 +123,7 @@ void switch_VALVE( uint8_t on )
 		Led_OnOff( LED_VALVE, 0 );
 		GPIO_PinWrite( PORT_RELAY_VALVE , PIN_RELAY_VALVE, 1 );
 	}
-	else if( isPumpTurnON() ) {
+	else if( IsPumpTurnON() ) {
 		Led_OnOff( LED_VALVE, 1 );
 		GPIO_PinWrite( PORT_RELAY_VALVE , PIN_RELAY_VALVE, 0 );
 	}
@@ -149,47 +176,65 @@ void Reg_Init(void)
 		
 	}
 
-	if( !FM24_ReadWords( EEADR_MAX_OUT_OF_WATER_SEC, &MAX_OUT_OF_WATER_SEC, 1 ) || MAX_OUT_OF_WATER_SEC == 0 )
+	if( !FM24_ReadWords( EEADR_TIMEOUT_TURN_PUMP_ON_SEC, &g_TIMEOUT_REGULATOR_ON_SEC, 1 ) || g_TIMEOUT_REGULATOR_ON_SEC == 0 )
 	{
-		MAX_OUT_OF_WATER_SEC = 15;
-		FM24_WriteWords( EEADR_MAX_OUT_OF_WATER_SEC, &MAX_OUT_OF_WATER_SEC, 1 );
+		g_TIMEOUT_REGULATOR_ON_SEC = 5;
+		FM24_WriteWords( EEADR_TIMEOUT_TURN_PUMP_ON_SEC, &g_TIMEOUT_REGULATOR_ON_SEC, 1 );
 	}
 
-	if( !FM24_ReadWords( EEADR_MAX_TIME_ERROR_PH_SEC, &MAX_TIME_ERROR_PH_SEC, 1 ) || MAX_TIME_ERROR_PH_SEC == 0 )
+	if( !FM24_ReadWords( EEADR_TIMEOUT_ERROR_PH_SEC, &g_TIMEOUT_ERROR_PH_SEC, 1 ) || g_TIMEOUT_ERROR_PH_SEC == 0 )
 	{
-		MAX_TIME_ERROR_PH_SEC = 90;
-		FM24_WriteWords( EEADR_MAX_TIME_ERROR_PH_SEC, &MAX_TIME_ERROR_PH_SEC, 1 );
+		g_TIMEOUT_ERROR_PH_SEC = 90;
+		FM24_WriteWords( EEADR_TIMEOUT_ERROR_PH_SEC, &g_TIMEOUT_ERROR_PH_SEC, 1 );
 	}
 
-	if( !FM24_ReadWords( EEADR_REG_CYCLETIME_SEC, &REG_CYCLETIME_SEC, 1 ) || REG_CYCLETIME_SEC == 0 )
+	if( !FM24_ReadWords( EEADR_REG_CYCLETIME_SEC, &g_REGULATOR_CYCLETIME_SEC, 1 ) || g_REGULATOR_CYCLETIME_SEC == 0 )
 	{
-		REG_CYCLETIME_SEC = REG_CYCLETIME_SEC_DEFAULT;
-		FM24_WriteWords( EEADR_REG_CYCLETIME_SEC, &REG_CYCLETIME_SEC, 1 );
+		g_REGULATOR_CYCLETIME_SEC = REG_CYCLETIME_SEC_DEFAULT;
+		FM24_WriteWords( EEADR_REG_CYCLETIME_SEC, &g_REGULATOR_CYCLETIME_SEC, 1 );
 	}
-	
-//	uint16_t ee_percent_on;
-//	if( !FM24_ReadWords( EEADR_REG_LAST_REGPOS_VALUE, &ee_percent_on, 1 ) || ee_percent_on > 10000 )
-//	{
-//		g_flRegPercentOn = 5;
-//		ee_percent_on = 500;
-//		FM24_WriteWords( EEADR_REG_LAST_REGPOS_VALUE, &ee_percent_on, 1 );
-//	}
-//	else 
-//	{
-//		g_flRegPercentOn = ee_percent_on;
-//		g_flRegPercentOn /= 100.0;
-//	}
 }
 
 /*******************************************************
-	Возвращает состояние датчика протока воды
+Поток		: Расчет величины PID 
+Параметр 1	: не используется
+Возвр. знач.: бесконечный цикл
 ********************************************************/
-bool IsWaterOk( void )
+void Thread_Pid( void *pvParameters )
 {
-	bool isOk;
-	isOk = ( GPIO_PinRead( PORT_SENS_WATER, PIN_SENS_WATER ) == 0 );
-	
-	return isOk;
+	float prop_value, integ_value, diff_value, error_ph;
+
+	TickType_t xLastWakeTime  = xTaskGetTickCount();
+	const TickType_t PERIOD_MS = 1000;
+		
+	for(;;)
+	{
+		vTaskDelayUntil( &xLastWakeTime, PERIOD_MS );
+
+		if( IsRegulatingOn() )
+		{
+			// при наличии воды и отсутсвии ошибок вычисляем величину PID
+			// ошибка Ph
+			error_ph = g_Setup_PH - g_Sensor_PH;
+			// пропорциональный компонент
+			prop_value = g_K_PROP * error_ph;
+			// интегральный компонент
+			integ_value =  g_K_INTEGRAL * error_ph;
+			// добавляем накопленный интегральный компонент
+			integ_value += g_PID_IntegralValue;
+			// сохраняем текущее значение накопленного интегрального компонента
+			g_PID_IntegralValue = integ_value;
+			// дифференциальный компонент
+			diff_value = g_Sensor_PH - g_prev_PhValue;
+			diff_value *= g_K_DIFF;
+			
+			// сохраняем текущее значение Ph для будущих расчетов
+			g_prev_PhValue = g_Sensor_PH;
+
+			g_PID_Value = prop_value + integ_value + diff_value;
+			g_PID_Value *= -1.0;
+		}
+	}
 }
 
 /*******************************************************
@@ -203,8 +248,6 @@ void Thread_Klapan( void *pvParameters )
 	
 	// Initialise the xLastWakeTime variable with the current time.
 	int impHigh_TimeMs, impLow_TimeMs, impCount;
-	float prop_value, integ_value, diff_value, error_ph;
-	//uint16_t ee_percent_on;
 	
 	switch_VALVE(0);
 	g_PID_IntegralValue = 0;
@@ -215,57 +258,29 @@ void Thread_Klapan( void *pvParameters )
 	TickType_t xLastWakeTime, xCurrTicks, xTickToNextCycle;
 	for(;;)
 	{
-		xLastWakeTime = xTaskGetTickCount();
-		
-		if( g_isNoWater || g_isErrSensors || g_isErrTimeoutSetupPh || (ReadWorkMode(0) != Mode_RegulatorPh) )
+		// Проверяем что процесс регулирования разрешен
+		if( !IsRegulatingOn() )
 		{
+			// Если нет, закрываем клапан и ждем дальше
 			switch_VALVE(0);
-			switch_PUMP(0);
+
 			vTaskDelay(50);
 			continue;
 		}
 
-		// при наличии воды и отсутсвии ошибок - регулируем
-		// ошибка Ph
-		error_ph = g_Setup_PH - g_Sensor_PH;
-		// пропорциональный компонент
-		prop_value = g_K_PROP * error_ph;
-		// интегральный компонент
-		integ_value =  g_K_INTEGRAL * error_ph;
-		// добавляем накопленный интегральный компонент
-		integ_value += g_PID_IntegralValue;
-		// сохраняем текущее значение накопленного интегрального компонента
-		g_PID_IntegralValue = integ_value;
-		// дифференциальный компонент
-		diff_value = g_K_DIFF * ( g_Sensor_PH - g_prev_PhValue ) * 10.0;
-		// сохраняем текущее значение Ph для будущих расчетов
-		g_prev_PhValue = g_Sensor_PH;
-
-		g_PID_Value = prop_value + integ_value + diff_value;
-		g_PID_Value *= -1.0;
+		// Запоминаем время начала цикла дозации
+		xLastWakeTime = xTaskGetTickCount();
 		
-		if( g_TimeToStartReg_ms <= 0 )
-		{
-			// если таймер на старт регулирования после подачи воды истек, то вычисляем параметры импульсов
-			g_flDeltaPercent = g_PID_Value;
-			g_flRegPercentOn += g_flDeltaPercent;
-			
-			if( g_flRegPercentOn > 95 )
-				g_flRegPercentOn = 95;
-			if( g_flRegPercentOn < 0 )
-				g_flRegPercentOn = 0;
+		// насос включен, то вычисляем параметры импульсов
+		g_flDeltaPercent = g_PID_Value;
+		g_flRegPercentOn += g_flDeltaPercent;
+		
+		if( g_flRegPercentOn > 95 )
+			g_flRegPercentOn = 95;
+		if( g_flRegPercentOn < 0 )
+			g_flRegPercentOn = 0;
 
-			//ee_percent_on = g_flRegPercentOn * 100;
-			//FM24_WriteWords( EEADR_REG_LAST_REGPOS_VALUE, &ee_percent_on, 1 );
-		}
-		else
-		{
-			// если таймер еще не сработал, то оставляем старое значение длины импульса регулирования
-			g_flDeltaPercent = 0;
-			g_flRegPercentOn = g_flRegPercentOn;
-		}
-
-		g_ImpulseTime_ms = (REG_CYCLETIME_SEC * 10) * g_flRegPercentOn;
+		g_ImpulseTime_ms = (g_REGULATOR_CYCLETIME_SEC * 10) * g_flRegPercentOn;
 		
 		if( g_ImpulseTime_ms > MIN_REGIMP_ONE_TIME_MS )
 		{
@@ -278,7 +293,7 @@ void Thread_Klapan( void *pvParameters )
 					// считаем суммарное время импульсов
 					int iSumImpulseMs = impHigh_TimeMs * impCount;
 					// считаем паузу между импульсами
-					impLow_TimeMs = (((REG_CYCLETIME_SEC * 1000)-100) - iSumImpulseMs) / impCount;
+					impLow_TimeMs = (((g_REGULATOR_CYCLETIME_SEC * 1000)-100) - iSumImpulseMs) / impCount;
 					if( impLow_TimeMs > MIN_REGIMP_PACK_TIME_MS )
 					{
 						// если все импульсы укладываются в слот времени цикла - выходим
@@ -290,7 +305,7 @@ void Thread_Klapan( void *pvParameters )
 			if( impCount == 0 && (impHigh_TimeMs > MIN_REGIMP_ONE_TIME_MS) )
 			{
 				impCount = 1;
-				impLow_TimeMs = (REG_CYCLETIME_SEC * 1000)-100 - impHigh_TimeMs;
+				impLow_TimeMs = (g_REGULATOR_CYCLETIME_SEC * 1000)-100 - impHigh_TimeMs;
 			}
 			
 			while( impCount-- )
@@ -314,9 +329,9 @@ void Thread_Klapan( void *pvParameters )
 		
 		xCurrTicks = xTaskGetTickCount();
 		
-		if( REG_CYCLETIME_SEC * 1000 > ( xCurrTicks - xLastWakeTime ) )
+		if( g_REGULATOR_CYCLETIME_SEC * 1000 > ( xCurrTicks - xLastWakeTime ) )
 		{			
-			xTickToNextCycle = (REG_CYCLETIME_SEC * 1000) - (xCurrTicks - xLastWakeTime);
+			xTickToNextCycle = (g_REGULATOR_CYCLETIME_SEC * 1000) - (xCurrTicks - xLastWakeTime);
 		}
 		else
 		{
@@ -326,6 +341,11 @@ void Thread_Klapan( void *pvParameters )
 		// Wait for the next cycle.
 		vTaskDelayUntil( &xLastWakeTime, xTickToNextCycle );
 	}
+}
+
+void SaveRegulatorValue( float setup_PH, float g_flRegPercentOn )
+{
+	
 }
 
 /*******************************************************
@@ -338,12 +358,12 @@ void Thread_Regulator( void *pvParameters )
 	const int REG_WUp_Time = 50; // время между циклами работы потока в мс.
 	
 	TickType_t xLastWakeTime;
-	int timeOutOfWater = 0;
 	int timeOutErrorPhValue = 0;
 	int timeOutErrorPhSensors = 0;
+	int timeValuePhIsGood = 0;
 
 	bool IsPhSensorsTooDiff;
-	bool is_WaterOk_curr;
+	//bool is_WaterOk_curr;
 
 	Reg_Init();
 
@@ -352,6 +372,7 @@ void Thread_Regulator( void *pvParameters )
 	vTaskDelay( 5000 );
 
 	xTaskCreate( Thread_Klapan, (const char*)"Klapan", configMINIMAL_STACK_SIZE, ( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+	xTaskCreate( Thread_Pid, (const char*)"Pid", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 	
 	// Initialise the xLastWakeTime variable with the current time.
 	xLastWakeTime = xTaskGetTickCount();
@@ -360,59 +381,56 @@ void Thread_Regulator( void *pvParameters )
 		// Wait for the next cycle.
 		vTaskDelayUntil( &xLastWakeTime, REG_WUp_Time );
 
-		if( g_TimeToStartReg_ms > 0 )
-			g_TimeToStartReg_ms -= REG_WUp_Time;
-		
+		// Проверка режима работы
 		if( ReadWorkMode(0) != Mode_RegulatorPh )
 		{
+			// Если не в режиме регулирования, то просто ждем
 			switch_VALVE(0); 
 			switch_PUMP(0); 
-			timeOutErrorPhSensors = 0;
-			timeOutErrorPhValue = 0;
-			timeOutOfWater = 0;
 			continue;
 		}
 		
-		// проверяем наличие воды
-		is_WaterOk_curr = IsWaterOk();
+		// Здесь мы в процессе регулирования
 		
-		if( !is_WaterOk_curr )
+		// Проверяем изменение наличия воды
+		if( g_isNoWater != !IsWaterOk() )
 		{
-			// сейчас нет воды
-			switch_PUMP( 0 ); // Выключаем насос
-			switch_VALVE(0);	// Отключаем клапан
-
-			g_isNoWater = true;
-			timeOutOfWater = 0;
-			g_prev_PhValue = g_Sensor_PH;
+			g_isNoWater = !IsWaterOk();
 			
-			// заводим таймер на время задержки регулирования после подачи воды
-			g_TimeToStartReg_ms = MAX_OUT_OF_WATER_SEC * 1000;
-		}
-		else 
-		{
-			// сейчас есть вода
-			if( !is_WaterOk_prev )
-			{
-				// если перед этим не было воды, обнуляем таймер на включение подачи воды
-				timeOutOfWater = 0;
+			if( g_isNoWater ) {
+				// вода пропала
+				// Выключаем насос
+				switch_PUMP( 0 ); 
+				// Отключаем клапан
+				switch_VALVE(0);	
 			}
-			else if( g_isNoWater )
-			{
-				// если вода есть, но стоит признак что воды нет, проверяем таймер на включение насоса
-				timeOutOfWater += REG_WUp_Time;
-				if( timeOutOfWater > (MAX_OUT_OF_WATER_SEC * 1000) )
-				{
-					g_isNoWater = false;
-					
-					switch_PUMP( 1 );	// Включаем насос
-					switch_VALVE(0);	// Отключаем клапан (на всякий случай)
-					
-					g_TimeToStartReg_ms = MAX_OUT_OF_WATER_SEC * 1000;				
-				}
+			else {
+				// вода появилась
+				// Включаем насос
+				switch_PUMP( 1 );
+				// Отключаем клапан (на всякий случай)
+				switch_VALVE(0);	
+				// запускаем таймер на старт процесса регулирования
+				g_TimeToStartReg_ms = g_TIMEOUT_REGULATOR_ON_SEC * 1000;
 			}
+			continue;
 		}
-		is_WaterOk_prev = is_WaterOk_curr;
+		
+		if( g_isNoWater ) {
+			// если нет воды, просто ждем
+			continue;
+		}
+		
+		// сейчас есть вода
+		// проверяем таймер на старт процесса регулирования
+		if( g_TimeToStartReg_ms > 0 ) {
+			// уменьщаем остаток времени задержки
+			g_TimeToStartReg_ms -= REG_WUp_Time;
+			// идем в начало цикла
+			continue;
+		}
+		
+		// Тут у нас вода есть, насос включен, задержка регулирования кончилась. Регулируем.
 		
 		// проверяем ошибки по датчикам PH и выводим на дисплей значения PH
 		g_Sensor_PH = AInp_GetSystemPh( &IsPhSensorsTooDiff );
@@ -421,7 +439,7 @@ void Thread_Regulator( void *pvParameters )
 			if( !g_isErrSensors )
 			{
 				timeOutErrorPhSensors  += REG_WUp_Time;
-				if( timeOutErrorPhSensors > (MAX_OUT_OF_WATER_SEC * 1000) )
+				if( timeOutErrorPhSensors > TIMEOUT_SENSORS_TOO_DIFF_MS )
 				{
 					g_isErrSensors = true;
 					timeOutErrorPhSensors = 0;
@@ -432,26 +450,33 @@ void Thread_Regulator( void *pvParameters )
 		{
 			timeOutErrorPhSensors = 0;
 		}
-		
-		if( !g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh )
+
+		if( fabs( g_Sensor_PH - g_Setup_PH ) > 0.5 )
 		{
-			if( fabs( g_Sensor_PH - g_Setup_PH ) > 0.5 )
-			{
-				timeOutErrorPhValue += REG_WUp_Time;
-				if( timeOutErrorPhValue > MAX_TIME_ERROR_PH_SEC * 1000 )
-				{
-					timeOutErrorPhValue = 0;
-					g_isErrTimeoutSetupPh = true;
-				}
-			}
-			else 
+			timeOutErrorPhValue += REG_WUp_Time;
+			if( timeOutErrorPhValue > (g_TIMEOUT_ERROR_PH_SEC * 1000) )
 			{
 				timeOutErrorPhValue = 0;
+				g_isErrTimeoutSetupPh = true;
 			}
 		}
-		else
+		else 
 		{
-			switch_VALVE(0);
+			timeOutErrorPhValue = 0;
+		}
+		if( fabs( g_Sensor_PH - g_Setup_PH ) < 0.2 )
+		{
+			timeValuePhIsGood += REG_WUp_Time;
+			if( timeValuePhIsGood > 60000 )
+			{
+				timeValuePhIsGood = 0;
+				// здесь надо сохранить положение регулятора в таблицу оптимальных значений
+				SaveRegulatorValue( g_Setup_PH, g_flRegPercentOn );
+			}
+		}
+		else 
+		{
+			timeValuePhIsGood = 0;
 		}
 	}
 }
@@ -558,9 +583,9 @@ bool Reg_WriteCoefficient( uint16_t idx, uint16_t val )
 /*******************************************************
 	Чтение максимального времени отсутствия воды
 ********************************************************/
-int Reg_Read_MAX_OUT_OF_WATER_SEC( uint16_t idx )
+int Reg_Read_TIMEOUT_TURN_PUMP_ON_SEC( uint16_t idx )
 {
-	int ivalue = MAX_OUT_OF_WATER_SEC; 
+	int ivalue = g_TIMEOUT_REGULATOR_ON_SEC; 
 	
 	return ivalue;
 }
@@ -568,9 +593,9 @@ int Reg_Read_MAX_OUT_OF_WATER_SEC( uint16_t idx )
 /*******************************************************
 	Чтение максимального времени регулировки PH до ошибки
 ********************************************************/
-int Reg_Read_MAX_TIME_ERROR_PH_SEC( uint16_t idx )
+int Reg_Read_TIMEOUT_ERROR_PH_SEC( uint16_t idx )
 {
-	int ivalue = MAX_TIME_ERROR_PH_SEC; 
+	int ivalue = g_TIMEOUT_ERROR_PH_SEC; 
 	
 	return ivalue;
 }
@@ -578,14 +603,14 @@ int Reg_Read_MAX_TIME_ERROR_PH_SEC( uint16_t idx )
 /*******************************************************
 	Запись максимального времени отсутствия воды
 ********************************************************/
-bool Reg_Write_MAX_OUT_OF_WATER_SEC( uint16_t idx, uint16_t val )
+bool Reg_Write_TIMEOUT_TURN_PUMP_ON_SEC( uint16_t idx, uint16_t val )
 {
 	// сохраняем в EEPROM
-	bool isWrited = FM24_WriteWords( EEADR_MAX_OUT_OF_WATER_SEC, &val, 1 );
+	bool isWrited = FM24_WriteWords( EEADR_TIMEOUT_TURN_PUMP_ON_SEC, &val, 1 );
 
 	if( isWrited )
 	{
-		MAX_OUT_OF_WATER_SEC = val;
+		g_TIMEOUT_REGULATOR_ON_SEC = val;
 	}
 	
 	return isWrited;
@@ -594,14 +619,14 @@ bool Reg_Write_MAX_OUT_OF_WATER_SEC( uint16_t idx, uint16_t val )
 /*******************************************************
 	Запись максимального времени регулировки PH до ошибки
 ********************************************************/
-bool Reg_Write_MAX_TIME_ERROR_PH_SEC( uint16_t idx, uint16_t val )
+bool Reg_Write_TIMEOUT_ERROR_PH_SEC( uint16_t idx, uint16_t val )
 {
 	// сохраняем в EEPROM
-	bool isWrited = FM24_WriteWords( EEADR_MAX_TIME_ERROR_PH_SEC, &val, 1 );
+	bool isWrited = FM24_WriteWords( EEADR_TIMEOUT_ERROR_PH_SEC, &val, 1 );
 
 	if( isWrited )
 	{
-		MAX_TIME_ERROR_PH_SEC = val;
+		g_TIMEOUT_ERROR_PH_SEC = val;
 	}
 	
 	return isWrited;
@@ -612,7 +637,7 @@ bool Reg_Write_MAX_TIME_ERROR_PH_SEC( uint16_t idx, uint16_t val )
 ********************************************************/
 int Reg_Read_REG_CYCLETIME_SEC( uint16_t idx )
 {
-	int ivalue = REG_CYCLETIME_SEC; 
+	int ivalue = g_REGULATOR_CYCLETIME_SEC; 
 	
 	return ivalue;
 }
@@ -684,7 +709,7 @@ bool Reg_Write_REG_CYCLETIME_SEC( uint16_t idx, uint16_t val )
 
 	if( isWrited )
 	{
-		REG_CYCLETIME_SEC = val;
+		g_REGULATOR_CYCLETIME_SEC = val;
 	}
 	
 	return isWrited;
@@ -692,8 +717,8 @@ bool Reg_Write_REG_CYCLETIME_SEC( uint16_t idx, uint16_t val )
 
 void Reg_RestartWaterTimer(void)
 {
-	g_isNoWater = true;
-	is_WaterOk_prev = false;
+	// запускаем таймер на старт процесса регулирования
+	g_TimeToStartReg_ms = g_TIMEOUT_REGULATOR_ON_SEC * 1000;
 }
 
 /*******************************************************

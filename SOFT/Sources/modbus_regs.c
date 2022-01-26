@@ -124,10 +124,10 @@ TRegEntry RegEntries[] =
 	// дифференциальный коэффициент 
 	{.addr=START_REG_COEFFICIENT+2, .idx = 2, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
 	
-	// максимальное время в секундах отсутствия воды для остановки регулятора и насоса
-	{.addr=START_REG_TIME_DEFINE+0, .idx = 0, .read = Reg_Read_MAX_OUT_OF_WATER_SEC, .write=Reg_Write_MAX_OUT_OF_WATER_SEC },
+	// таймаут в секундах задержки включения насоса и процесса регулирования после подачи воды
+	{.addr=START_REG_TIME_DEFINE+0, .idx = 0, .read = Reg_Read_TIMEOUT_TURN_PUMP_ON_SEC, .write=Reg_Write_TIMEOUT_TURN_PUMP_ON_SEC },
 	// максимальное время в секундах отклонения значения PH от задания PH для остановки регулятора и насоса
-	{.addr=START_REG_TIME_DEFINE+1, .idx = 0, .read = Reg_Read_MAX_TIME_ERROR_PH_SEC, .write=Reg_Write_MAX_TIME_ERROR_PH_SEC },
+	{.addr=START_REG_TIME_DEFINE+1, .idx = 0, .read = Reg_Read_TIMEOUT_ERROR_PH_SEC, .write=Reg_Write_TIMEOUT_ERROR_PH_SEC },
 	// время хода регулятора в секундах
 	{.addr=START_REG_TIME_DEFINE+2, .idx = 0, .read = Reg_Read_REG_CYCLETIME_SEC, .write=Reg_Write_REG_CYCLETIME_SEC },
 	
