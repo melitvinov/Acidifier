@@ -125,11 +125,13 @@ TRegEntry RegEntries[] =
 	{.addr=START_REG_COEFFICIENT+2, .idx = 2, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
 	
 	// таймаут в секундах задержки включения насоса и процесса регулирования после подачи воды
-	{.addr=START_REG_TIME_DEFINE+0, .idx = 0, .read = Reg_Read_TIMEOUT_TURN_PUMP_ON_SEC, .write=Reg_Write_TIMEOUT_TURN_PUMP_ON_SEC },
+	{.addr=START_REG_TIME_DEFINE+0, .idx = 0, .read = Reg_Read_TIMEOUT_REGULATOR_ON_SEC, .write=Reg_Write_TIMEOUT_REGULATOR_ON_SEC },
 	// максимальное время в секундах отклонения значения PH от задания PH для остановки регулятора и насоса
 	{.addr=START_REG_TIME_DEFINE+1, .idx = 0, .read = Reg_Read_TIMEOUT_ERROR_PH_SEC, .write=Reg_Write_TIMEOUT_ERROR_PH_SEC },
-	// время хода регулятора в секундах
+	// длительность интервала дозации
 	{.addr=START_REG_TIME_DEFINE+2, .idx = 0, .read = Reg_Read_REG_CYCLETIME_SEC, .write=Reg_Write_REG_CYCLETIME_SEC },
+	// таймаут задержки отключения насоса в секундах (0-20)
+	{.addr=START_REG_TIME_DEFINE+3, .idx = 0, .read = Reg_Read_DELAY_PUMP_OFF_SEC, .write=Reg_Write_DELAY_PUMP_OFF_SEC },
 	
 	// флаг - отсутствие воды (0-1)
 	{.addr=START_REG_MONITORING+0, .idx = MON_IsNoWater, .read = Reg_Read_MonitoringValue, .write=0 },

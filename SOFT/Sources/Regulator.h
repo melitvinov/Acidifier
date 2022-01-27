@@ -17,6 +17,7 @@
 
 #include "FreeRTOS.h"
 #include "task.h"
+#include "timers.h"
 
 // --- DEFINES -------------------
 #define REL_ON	(0) // логический уровень для включения реле
@@ -26,6 +27,8 @@
 
 // --- TYPES ---------------------
 
+#pragma pack(push,1)
+
 typedef struct _relay_desc
 {
 	GPIO_TypeDef *GPIOx;
@@ -34,10 +37,13 @@ typedef struct _relay_desc
 
 typedef struct _opt_table_point
 {
-	uint16_t ph_setup;
-	uint16_t opt_def;
-	uint16_t opt_calc;
+	uint16_t ph_setup_def;
+	uint16_t reg_value_opt_def;
+	uint16_t ph_setup_user;
+	uint16_t reg_value_opt_calc;
 } TOptTablePoint;
+
+#pragma pack(pop)
 
 //--- FUNCTIONS ------------------
 void Reg_Init(void);
@@ -47,13 +53,16 @@ void Thread_Regulator( void *pvParameters );
 int Reg_ReadCoefficient( uint16_t idx );
 bool Reg_WriteCoefficient( uint16_t idx, uint16_t val );
 
-int Reg_Read_TIMEOUT_TURN_PUMP_ON_SEC( uint16_t idx );
+int Reg_Read_TIMEOUT_REGULATOR_ON_SEC( uint16_t idx );
 int Reg_Read_TIMEOUT_ERROR_PH_SEC( uint16_t idx );
-bool Reg_Write_TIMEOUT_TURN_PUMP_ON_SEC( uint16_t idx, uint16_t val );
+bool Reg_Write_TIMEOUT_REGULATOR_ON_SEC( uint16_t idx, uint16_t val );
 bool Reg_Write_TIMEOUT_ERROR_PH_SEC( uint16_t idx, uint16_t val );
 
 int Reg_Read_REG_CYCLETIME_SEC( uint16_t idx );
 bool Reg_Write_REG_CYCLETIME_SEC( uint16_t idx, uint16_t val );
+
+int Reg_Read_DELAY_PUMP_OFF_SEC( uint16_t idx );
+bool Reg_Write_DELAY_PUMP_OFF_SEC( uint16_t idx, uint16_t val );
 
 typedef enum __monitoring_types
 {
@@ -75,6 +84,8 @@ typedef enum __monitoring_types
 
 int Reg_Read_MonitoringValue( uint16_t idx );	// чтение одного из регистров мониторинга текущего состояния
 
-void Reg_RestartWaterTimer(void);
+//void Reg_RestartWaterTimer(void);
+void Regulator_START(void);
+bool IsPumpTurnON( void );
 
 #endif

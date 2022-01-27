@@ -34,8 +34,7 @@ const float MAX_VALUE_SETUP_PH = 100;
 uint8_t g_DeviceAddr = 0;	// текущий адрес устройства на шине RS-485
 
 EWorkMode g_WorkMode;				// текущий режим работы / отображени€
-bool g_isNoWater = false;
-//bool g_isErrRegulator = false;
+bool g_isNoWater;
 bool g_isErrTimeoutSetupPh = false;
 bool g_isErrSensors = false;
 
@@ -582,10 +581,6 @@ void display_clearErrors( void )
 // —брос всех ошибок
 void clearAllErrors( void )
 {
-	//g_isErrRegulator = false;
-	g_isErrTimeoutSetupPh = false;
-	g_isErrSensors = false;
-
 	// ќтображение сброса ошибок
 	display_clearErrors();
 }
@@ -656,7 +651,9 @@ void Thread_WORK( void *pvParameters )
 				{
 					// сброс нажатых кнопок
 					clearAllButtons();
-					g_WorkMode = Mode_Calibrating_PH1;
+					
+					if( g_isNoWater && !IsPumpTurnON() )
+						g_WorkMode = Mode_Calibrating_PH1;
 				}
 				else if( g_isBtnPlusClick )
 				{
@@ -678,11 +675,13 @@ void Thread_WORK( void *pvParameters )
 				{
 					// сброс нажатых кнопок
 					clearAllButtons();
-
 					clearAllErrors();
-					
+
 					g_WorkMode = Mode_RegulatorPh;
-					Reg_RestartWaterTimer();
+					g_isNoWater = true;
+					g_isErrTimeoutSetupPh = false;
+					g_isErrSensors = false;
+					
 				}
 				break;
 			
@@ -739,7 +738,7 @@ void Thread_WORK( void *pvParameters )
 					clearAllButtons();
 					
 					g_WorkMode = Mode_RegulatorPh;
-					Reg_RestartWaterTimer();
+					g_isNoWater = true;
 				}
 			
 				break;
@@ -780,7 +779,7 @@ void Thread_WORK( void *pvParameters )
 					LcdDig_DispBlinkOff( SideLEFT | SideRIGHT );
 					
 					g_WorkMode = Mode_RegulatorPh;
-					Reg_RestartWaterTimer();
+					g_isNoWater = true;
 				}
 				else if( g_isEscClick )
 				{
@@ -789,14 +788,14 @@ void Thread_WORK( void *pvParameters )
 					clearAllButtons();
 					
 					g_WorkMode = Mode_RegulatorPh;
-					Reg_RestartWaterTimer();
+					g_isNoWater = true;
 				}
 				
 				break;
 			
 			default:
 				g_WorkMode = Mode_RegulatorPh;
-				Reg_RestartWaterTimer();
+				Regulator_START();
 				break;
 		}
 	}
