@@ -50,16 +50,17 @@ int g_ImpulseTime_ms;					// длительность открытия клапана в мс.
 float g_PID_IntegralValue = 0;			// накопленный интегральный компонент для расчета PID
 float g_prev_PhValue = 7;				// предыдущее значение Ph  для расчета PID
 
-int g_TimeToStartReg_ms;				// оставшееся время до начала дозации после включения насоса в мс
-int g_TimeToStartCalcPID_ms;			// оставшееся время до начала вычисления PID в мс
+//int g_TimeToStartReg_ms;				// оставшееся время до начала дозации после включения насоса в мс
+//int g_TimeToStartCalcPID_ms;			// оставшееся время до начала вычисления PID в мс
+bool g_RegulatorStarted;				// флаг - регулятор работает
+bool g_CalcPidStarted;					// флаг - расчет PID работает
 
 // таблица оптимальных начальных значений регулятора для трех ph значений 
-// index 0 - Ph 4..4,99
-// index 1 - Ph 5..5,99
-// index 0 - Ph 6..6,99
 TOptTablePoint g_OptTablePoints[3];		
 
-TimerHandle_t xTimer;
+TimerHandle_t TimerPump;
+TimerHandle_t TimerRegulator;
+TimerHandle_t TimerCalcPid;
 
 //--- FUNCTIONS ------------------
 extern int ReadWorkMode( uint16_t idx );
@@ -68,20 +69,61 @@ void Thread_Klapan( void *pvParameters );
 void switch_VALVE( uint8_t on );
 void switch_PUMP( uint8_t on );
 
-/* Define a callback function that will be used by multiple timer
- instances.  The callback function does nothing but count the number
- of times the associated timer expires, and stop the timer once the
- timer has expired 10 times.  The count is saved as the ID of the
- timer. */
-void vTimerCallback( TimerHandle_t xTimer )
+/*******************************************************
+Функция		: Остановка насоса по таймеру
+Возвр. знач.: нет
+********************************************************/
+void OnTimerPump( TimerHandle_t xTimer )
 {
-	/* Optionally do something if the pxTimer parameter is NULL. */
 	configASSERT( xTimer );
 	
 	xTimerStop( xTimer, 0 );
 	switch_PUMP(0);
 }
- 
+
+/*******************************************************
+Функция		: Старт регулятора по таймеру
+Возвр. знач.: нет
+********************************************************/
+void OnTimerRegulator( TimerHandle_t xTimer )
+{
+	configASSERT( xTimer );
+	
+	xTimerStop( xTimer, 0 );
+
+	// Устанавливаем значение регулятора
+	int index;
+	if( g_Setup_PH >= 6 ) index = 0;
+	else if( g_Setup_PH >= 5 ) index = 1;
+	else index = 2;
+	if( g_OptTablePoints[index].ph_setup_user != 0xFFFF && g_OptTablePoints[index].reg_value_opt_calc != 0xFFFF )
+		g_flRegPercentOn = ((float)g_OptTablePoints[index].reg_value_opt_calc) / 10.0;
+	else
+		g_flRegPercentOn = ((float)g_OptTablePoints[index].reg_value_opt_def) / 10.0;
+
+		if( g_flRegPercentOn > 100 )
+	{
+		// !!! Ошибка
+		g_flRegPercentOn = 5;			// если при начальной установке положения регулятора произошла ошибка, ставим 5% открытия
+	}
+	
+	xTimerStart( TimerCalcPid, 0 );
+	
+	g_RegulatorStarted = true;
+}
+
+/*******************************************************
+Функция		: Старт расчета PID по таймеру
+Возвр. знач.: нет
+********************************************************/
+void OnTimerCalcPid( TimerHandle_t xTimer )
+{
+	configASSERT( xTimer );
+	
+	xTimerStop( xTimer, 0 );
+	g_CalcPidStarted = true;
+}
+
 /*******************************************************
 Функция		: Включение регулятора. (после подачи воды)
 Возвр. знач.: нет
@@ -94,42 +136,40 @@ void Regulator_START(void)
 	g_PID_IntegralValue = 0;			// накопленный интегральный компонент для расчета PID
 	g_prev_PhValue = 7;					// предыдущее значение Ph  для расчета PID
 	
-	// Устанавливаем значение регулятора
-	int index;
-	if( g_Setup_PH >= 6 ) index = 0;
-	else if( g_Setup_PH >= 5 ) index = 1;
-	else index = 2;
-	
-	if( g_OptTablePoints[index].ph_setup_user != 0xFFFF && g_OptTablePoints[index].reg_value_opt_calc != 0xFFFF )
-		g_flRegPercentOn = g_OptTablePoints[index].reg_value_opt_calc;
-	else
-		g_flRegPercentOn = g_OptTablePoints[index].reg_value_opt_def;
-
-		if( g_flRegPercentOn > 100 )
-	{
-		// !!! Ошибка
-		g_flRegPercentOn = 5;			// если при начальной установке положения регулятора произошла ошибка, ставим 5% открытия
-	}
-	
 	// устанавливаем таймер на старт процесса регулирования
-	g_TimeToStartReg_ms = g_TIMEOUT_REGULATOR_ON_SEC * 1000;
-	// устанавливаем таймер на старт процесса вычисления PID (10 сек.)
-	g_TimeToStartCalcPID_ms = 10000;	
-	
+	xTimerChangePeriod( TimerRegulator, g_TIMEOUT_REGULATOR_ON_SEC > 0 ? (g_TIMEOUT_REGULATOR_ON_SEC * 1000) : 100, 0 );
+
+	// Останавливаем таймер насоса
+	configASSERT( TimerPump );
+	xTimerStop( TimerPump, 0 );
+
 	// Включаем насос
-	configASSERT( xTimer );
-	xTimerStop( xTimer, 0 );
 	switch_PUMP( 1 );
 }
 
 void Regulator_STOP(void) 
 {
+	configASSERT( TimerPump )
+	configASSERT( TimerCalcPid )
+	configASSERT( TimerRegulator )
+
+	xTimerStop( TimerRegulator, 0 );
+	xTimerStop( TimerCalcPid, 0 );
+	
+	g_RegulatorStarted = false;
+	g_CalcPidStarted = false;
+	
+	g_flDeltaPercent = 0;
+	g_flRegPercentOn = 0;
+	g_PID_Value = 0;
+	g_PID_IntegralValue = 0;
+	g_RegulatorStarted = false;
+	g_CalcPidStarted = false;
+	
 	// Выключаем насос через задержку
-	configASSERT( xTimer );
+	xTimerChangePeriod( TimerPump, g_DELAY_PUMP_OFF_SEC > 0 ? (g_DELAY_PUMP_OFF_SEC * 1000) : 100, 0 );
 	
-	xTimerChangePeriod( xTimer, g_DELAY_PUMP_OFF_SEC > 0 ? (g_DELAY_PUMP_OFF_SEC * 1000) : 100, 0 );
-	
-	BaseType_t result = xTimerStart( xTimer, 50 );
+	BaseType_t result = xTimerStart( TimerPump, 50 );
 	if( result != pdPASS )
 	{ /* The timer could not be set into the Active
 	   state. */
@@ -137,9 +177,6 @@ void Regulator_STOP(void)
 		// через таймер не вышло, отключаем сразу
 		switch_PUMP( 0 ); 
 	}
-		
-	// Отключаем клапан
-	switch_VALVE(0);	
 }
 
 /*******************************************************
@@ -179,7 +216,7 @@ bool IsRegulatingOn( void )
 {
 	bool isOn;
 	
-	isOn = (!g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh && (g_TimeToStartReg_ms <= 0) );
+	isOn = (!g_isNoWater && !g_isErrSensors && !g_isErrTimeoutSetupPh && g_RegulatorStarted );
 	
 	return isOn;
 }
@@ -207,7 +244,7 @@ void setUpDefaultOptTable( void )
 	for( int i=0; i<3; i++ )
 	{
 		g_OptTablePoints[i].ph_setup_def = 65 - (i*10);				// PH 		= 6.5	5.5		4.5
-		g_OptTablePoints[i].reg_value_opt_def = 10 + (i*20);		// Value 	= 10	30		50
+		g_OptTablePoints[i].reg_value_opt_def = (10 + (i*20)) * 10; // Value 	= 10	30		50
 		g_OptTablePoints[i].ph_setup_user = 0xFFFF;					// PH 		= 0xFFFF - нет значения
 		g_OptTablePoints[i].reg_value_opt_calc = 0xFFFF;			// Value 	= 0xFFFF - нет значения
 	}
@@ -321,7 +358,7 @@ void Thread_Pid( void *pvParameters )
 	{
 		vTaskDelayUntil( &xLastWakeTime, PERIOD_MS );
 
-		if( IsRegulatingOn() && (g_TimeToStartCalcPID_ms <= 0) )
+		if( IsRegulatingOn() && g_CalcPidStarted )
 		{
 			// при наличии воды и отсутсвии ошибок вычисляем величину PID
 			// ошибка Ph
@@ -470,14 +507,14 @@ void Thread_Klapan( void *pvParameters )
 	}
 }
 
-void SaveRegulatorValue( float setup_PH, uint16_t value )
+void SaveRegulatorValue( float setup_PH, float value )
 {
 	int index = 0;
 	if( setup_PH < 5 )	index = 2;
 	else if( setup_PH < 6 )	index = 1;
 	
 	g_OptTablePoints[index].ph_setup_user = roundf( setup_PH * 10 );
-	g_OptTablePoints[index].reg_value_opt_calc = value;
+	g_OptTablePoints[index].reg_value_opt_calc = value * 10;
 	
 	FM24_WriteBytes( EEADR_OPT_TABLE, (uint8_t*) &g_OptTablePoints, sizeof(g_OptTablePoints) );
 }
@@ -490,12 +527,14 @@ void SaveRegulatorValue( float setup_PH, uint16_t value )
 void Thread_Regulator( void *pvParameters )
 {
 	const int REG_WUp_Time = 100; // время между циклами работы потока в мс.
+	const int TIMEOUT_DELAY_CALC_PID = 10000;	// время задержки начала расчета PID
 	
 	TickType_t xLastWakeTime;
 	int timeOutErrorPhValue = 0;
 	int timeOutErrorPhSensors = 0;
 	int timeValuePhIsGood = 0;
-	int sumRegValue, countAvgValues;
+	int countAvgValues;
+	float sumRegValue;
 
 	bool IsPhSensorsTooDiff;
 	//bool is_WaterOk_curr;
@@ -509,25 +548,21 @@ void Thread_Regulator( void *pvParameters )
 	xTaskCreate( Thread_Klapan, (const char*)"Klapan", configMINIMAL_STACK_SIZE, ( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 	xTaskCreate( Thread_Pid, (const char*)"Pid", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
-	xTimer = xTimerCreate
-                   ( /* Just a text name, not used by the RTOS
-                     kernel. */
-                     "Timer",
-                     /* The timer period in ticks, must be
-                     greater than 0. */
-                     g_DELAY_PUMP_OFF_SEC > 0 ? (g_DELAY_PUMP_OFF_SEC * 1000) : 10,
-                     /* The timers will auto-reload themselves
-                     when they expire. */
-                     pdTRUE,
-                     /* The ID is used to store a count of the
-                     number of times the timer has expired, which
-                     is initialised to 0. */
-                     ( void * ) 0,
-                     /* Each timer calls the same callback when
-                     it expires. */
-                     vTimerCallback
-                   );
+	TimerPump = xTimerCreate("TimerPump", g_DELAY_PUMP_OFF_SEC > 0 ? (g_DELAY_PUMP_OFF_SEC * 1000) : 10,
+                     pdTRUE, 		// The timers will auto-reload themselves when they expire.
+                     ( void * ) 0,	// The ID
+                     OnTimerPump );
+					 
+	TimerRegulator = xTimerCreate("TimerRegulator", g_TIMEOUT_REGULATOR_ON_SEC > 0 ? (g_TIMEOUT_REGULATOR_ON_SEC * 1000) : 10,
+                     pdTRUE, 		// The timers will auto-reload themselves when they expire.
+                     ( void * ) 0,	// The ID
+                     OnTimerRegulator );
 
+	TimerCalcPid = xTimerCreate("TimerCalcPid", TIMEOUT_DELAY_CALC_PID,
+                     pdTRUE, 		// The timers will auto-reload themselves when they expire.
+                     ( void * ) 0,	// The ID
+                     OnTimerCalcPid );
+					 
 	// Initialise the xLastWakeTime variable with the current time.
 	xLastWakeTime = xTaskGetTickCount();
 	for(;;)
@@ -567,18 +602,6 @@ void Thread_Regulator( void *pvParameters )
 			continue;
 		}
 
-		// Работа с таймерами
-		if( g_TimeToStartReg_ms > 0 ) {
-			// уменьщаем остаток времени задержки
-			g_TimeToStartReg_ms -= REG_WUp_Time;
-			continue;
-		}
-		
-		if( g_TimeToStartCalcPID_ms > 0 ) {
-			// после задержки включения процесса регулирования, начинаем уменьшать время задержки вычисления PID
-			g_TimeToStartCalcPID_ms -= REG_WUp_Time;
-		}
-		
 		if( !IsPumpTurnON() )
 			switch_PUMP(1); // Включаем насос
 			
@@ -620,12 +643,13 @@ void Thread_Regulator( void *pvParameters )
 		{
 			timeValuePhIsGood += REG_WUp_Time;
 			countAvgValues++;
-			sumRegValue += roundf( g_flRegPercentOn );
+			sumRegValue += g_flRegPercentOn;
 			if( timeValuePhIsGood > 60000 )
 			{
 				timeValuePhIsGood = 0;
 				// здесь надо сохранить положение регулятора в таблицу оптимальных значений
-				uint16_t avgRegValue = sumRegValue / countAvgValues;
+				float avgRegValue = sumRegValue;
+				avgRegValue /= countAvgValues;
 				SaveRegulatorValue( g_Setup_PH, avgRegValue );
 			}
 		}
@@ -892,109 +916,44 @@ bool Reg_Write_REG_CYCLETIME_SEC( uint16_t idx, uint16_t val )
 	return isWrited;
 }
 
-//void Reg_RestartWaterTimer(void)
-//{
-//	// запускаем таймер на старт процесса регулирования
-//	g_TimeToStartReg_ms = g_TIMEOUT_REGULATOR_ON_SEC * 1000;
-//}
-
-/*******************************************************
-	Проверка работоспособности регуятора PH
-********************************************************/
-/*
-bool Reg_IsError( void )
+int Reg_OptValues_Read( uint16_t idx )
 {
-	// !!! ВРЕМЕННАЯ ЗАГЛУШКА
-	//return false;
-
-	bool isError = false;
 	
-	Reg_RelayOff( REL_PH_PLUS );
-	Reg_RelayOff( REL_PH_MINUS );
-	// делаем небольшую паузу
-	vTaskDelay( 200 );
-	if( IsCurrent_PH_MINUS() || IsCurrent_PH_PLUS() )
+	switch( idx )
 	{
-		// если есть ток при выключенных реле
-		isError = true;
+		case 0: return g_OptTablePoints[0].ph_setup_def;
+		case 1: return g_OptTablePoints[0].reg_value_opt_def;
+		case 2: return g_OptTablePoints[0].ph_setup_user;
+		case 3: return g_OptTablePoints[0].reg_value_opt_calc;
+		case 4: return g_OptTablePoints[1].ph_setup_def;
+		case 5: return g_OptTablePoints[1].reg_value_opt_def;
+		case 6: return g_OptTablePoints[1].ph_setup_user;
+		case 7: return g_OptTablePoints[1].reg_value_opt_calc;
+		case 8: return g_OptTablePoints[2].ph_setup_def;
+		case 9: return g_OptTablePoints[2].reg_value_opt_def;
+		case 10: return g_OptTablePoints[2].ph_setup_user;
+		case 11: return g_OptTablePoints[2].reg_value_opt_calc;
+		default : break;
 	}
-	else
-	{
-		// Включаем реле закрытия регулятора
-		Reg_RelayOn( REL_PH_MINUS );
-		// делаем небольшую паузу
-		vTaskDelay( 200 );
-		if( !IsCurrent_PH_MINUS() )
-		{
-			// нет тока в цепи закрытия при включенном реле
-			// возможно мы находимся в полностью закрытом положении
-			// тогда концевик открытия должен быть не замкнут, проверяем
-			Reg_RelayOff( REL_PH_MINUS );
-			Reg_RelayOn( REL_PH_PLUS );
-			// делаем небольшую паузу
-			vTaskDelay( 200 );
-			if( !IsCurrent_PH_PLUS() )
-			{
-				// нет тока в цепи открытия в положении когда он должен быть, ошибка
-				isError = true;
-			}
-		}
-		else
-		{
-			// есть ток в цепи закрытия
-			Reg_RelayOff( REL_PH_MINUS );
-		}
-	}
-	
-	return isError;
+	return -1;
 }
-*/
 
-/*******************************************************
-	Попытка полностью открыть регулятор
-********************************************************/
-/*
-bool Reg_ToOpen( void )
+bool Reg_OptValues_Write( uint16_t idx, uint16_t val )
 {
-	// !!! ВРЕМЕННАЯ ЗАГЛУШКА
-	//return true;
+	bool result = false;
 	
-	bool isOpenOk = false;
+	if( idx != 1 && idx != 5 && idx != 9 )
+		return false;
 	
-	int openTime;
+	uint16_t eeAddr = EEADR_OPT_TABLE + (idx*2);
 	
-	if( !Reg_IsError() )
+	result = FM24_WriteWords( eeAddr, &val, 1 );
+	if( result )
 	{
-		// Здесь крутим до положения "полностью открыто"
-		Reg_RelayOn( REL_PH_PLUS );
-		// ждем срабатывания концевика открытия
-		openTime = 0;
-		
-		// ждем пропадания тока в цепи мотора
-		for( ;; )
-		{
-			vTaskDelay( 1000 );
-			openTime++;
-
-			if( !IsCurrent_PH_PLUS() ) 
-			{
-				// нет тока в цепи мотора, сработал концевик, регулятор открыт полностью
-				isOpenOk = true;
-				break;
-			}
-			
-			if( openTime > FULL_MOVE_TIME_SEC )
-			{
-				// время хода больше установленного в настройках для этого регулятора
-				// либо концевик неисправен, либо мотор не крутится
-				break;
-			}
-		
-		}
-
-		Reg_RelayOff( REL_PH_PLUS );
+		if( idx == 1 ) 		g_OptTablePoints[0].reg_value_opt_def = val;
+		else if( idx == 5 ) g_OptTablePoints[1].reg_value_opt_def = val;
+		else if( idx == 9 ) g_OptTablePoints[2].reg_value_opt_def = val;
 	}
-	
-	return isOpenOk;
+	return result;
 }
-*/
+

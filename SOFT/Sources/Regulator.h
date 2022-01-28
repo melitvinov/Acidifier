@@ -64,6 +64,10 @@ bool Reg_Write_REG_CYCLETIME_SEC( uint16_t idx, uint16_t val );
 int Reg_Read_DELAY_PUMP_OFF_SEC( uint16_t idx );
 bool Reg_Write_DELAY_PUMP_OFF_SEC( uint16_t idx, uint16_t val );
 
+int Reg_OptValues_Read( uint16_t idx );
+bool Reg_OptValues_Write( uint16_t idx, uint16_t val );
+
+
 typedef enum __monitoring_types
 {
 	MON_IsNoWater	 		= 1,			// флаг - отсутствие воды (0-1)

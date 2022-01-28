@@ -130,7 +130,7 @@ TRegEntry RegEntries[] =
 	{.addr=START_REG_TIME_DEFINE+1, .idx = 0, .read = Reg_Read_TIMEOUT_ERROR_PH_SEC, .write=Reg_Write_TIMEOUT_ERROR_PH_SEC },
 	// длительность интервала дозации
 	{.addr=START_REG_TIME_DEFINE+2, .idx = 0, .read = Reg_Read_REG_CYCLETIME_SEC, .write=Reg_Write_REG_CYCLETIME_SEC },
-	// таймаут задержки отключения насоса в секундах (0-20)
+	// таймаут задержки отключения насоса в секундах (1-20)
 	{.addr=START_REG_TIME_DEFINE+3, .idx = 0, .read = Reg_Read_DELAY_PUMP_OFF_SEC, .write=Reg_Write_DELAY_PUMP_OFF_SEC },
 	
 	// флаг - отсутствие воды (0-1)
@@ -159,6 +159,24 @@ TRegEntry RegEntries[] =
 	{.addr=START_REG_MONITORING+10, .idx = MON_DeltaPercentPositive, .read = Reg_Read_MonitoringValue, .write=0 },
 	// длительность открытия клапана в мс.
 	{.addr=START_REG_MONITORING+11, .idx = MON_ImpulseTime_ms, .read = Reg_Read_MonitoringValue, .write=0 },
+	
+	// таблица оптимальных значений регулятора
+	// чтение таблицы
+	// Первая запись
+	{.addr=START_REG_OPTVALUES+0, .idx = 0, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_def
+	{.addr=START_REG_OPTVALUES+1, .idx = 1, .read = Reg_OptValues_Read, .write=Reg_OptValues_Write },	// reg_value_opt_def
+	{.addr=START_REG_OPTVALUES+2, .idx = 2, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_user
+	{.addr=START_REG_OPTVALUES+3, .idx = 3, .read = Reg_OptValues_Read, .write=0 },	// reg_value_opt_calc
+	// Вторая запись
+	{.addr=START_REG_OPTVALUES+4, .idx = 4, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_def
+	{.addr=START_REG_OPTVALUES+5, .idx = 5, .read = Reg_OptValues_Read, .write=Reg_OptValues_Write },	// reg_value_opt_def
+	{.addr=START_REG_OPTVALUES+6, .idx = 6, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_user
+	{.addr=START_REG_OPTVALUES+7, .idx = 7, .read = Reg_OptValues_Read, .write=0 },	// reg_value_opt_calc
+	// Третья запись
+	{.addr=START_REG_OPTVALUES+8, .idx = 8, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_def
+	{.addr=START_REG_OPTVALUES+9, .idx = 9, .read = Reg_OptValues_Read, .write=Reg_OptValues_Write },	// reg_value_opt_def
+	{.addr=START_REG_OPTVALUES+10, .idx =10, .read = Reg_OptValues_Read, .write=0 },// ph_setup_user
+	{.addr=START_REG_OPTVALUES+11, .idx =11, .read = Reg_OptValues_Read, .write=0 },// reg_value_opt_calc
 };
 
 //--- FUNCTIONS ------------------
