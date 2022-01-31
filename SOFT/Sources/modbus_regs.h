@@ -15,11 +15,11 @@
 // --- DEFINES -------------------
 #define START_REG_NUM 			0 			
 #define START_REG_VALUES		1000						// номер первого регистра значений
-#define START_REG_TAR_POINT		2000						// номер первого регистра тарировочных точек
-#define START_REG_COEFFICIENT	3000						// номер первого регистра коэффициентов для расчета PidValue
-#define START_REG_TIME_DEFINE	4000						// номер первого регистра таймаутов
-#define START_REG_MONITORING	5000						// номер первого регистра мониторинга текущих параметров
-#define START_REG_OPTVALUES		6000						// номер первого регистра таблицы оптимальных значений регулятора
+//#define START_REG_TAR_POINT		2000						// номер первого регистра тарировочных точек
+//#define START_REG_COEFFICIENT	3000						// номер первого регистра коэффициентов для расчета PidValue
+//#define START_REG_TIME_DEFINE	4000						// номер первого регистра таймаутов
+//#define START_REG_MONITORING	5000						// номер первого регистра мониторинга текущих параметров
+//#define START_REG_OPTVALUES		6000						// номер первого регистра таблицы оптимальных значений регулятора
 
 // --- TYPES ---------------------
 

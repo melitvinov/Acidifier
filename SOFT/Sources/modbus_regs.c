@@ -52,6 +52,8 @@ uint16_t regs_addin[15] = {
 	0, 0, 0, 0xBEB0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 
 };
 
+//uint16_t idx = 0;
+
 //--- EXTERN ---------------------
 extern uint8_t GetDeviceAddress(void);
 extern int ReadWorkMode( uint16_t idx );
@@ -87,96 +89,96 @@ TRegEntry RegEntries[] =
 	{.addr=59, .idx = 12, .read = readAddIn, .write=writeAddIn, },
 
 	// Текущий режим работы ( 1-Регулирование, 2-калибровка Т1, 3-калибровка Т2 )
-	{.addr=START_REG_VALUES-1, .idx = 0, .read = ReadWorkMode, .write=0 },
+	{.addr=START_REG_VALUES+0, .idx = 0, .read = ReadWorkMode, .write=0 },
 
 	// Значение АЦП датчика PH №1
-	{.addr=START_REG_VALUES+0, .idx = 0, .read = AInp_ReadAdcValue, .write=0 },
+	{.addr=START_REG_VALUES+1, .idx = 0, .read = AInp_ReadAdcValue, .write=0 },
 	// Значение АЦП датчика PH №2
-	{.addr=START_REG_VALUES+1, .idx = 1, .read = AInp_ReadAdcValue, .write=0 },
+	{.addr=START_REG_VALUES+2, .idx = 1, .read = AInp_ReadAdcValue, .write=0 },
 	// Значение датчика PH №1 ( умноженное на 10 )
-	{.addr=START_REG_VALUES+2, .idx = 0, .read = AInp_ReadPhValue, .write=0 },
+	{.addr=START_REG_VALUES+3, .idx = 0, .read = AInp_ReadPhValue, .write=0 },
 	// Значение датчика PH №2 ( умноженное на 10 )
-	{.addr=START_REG_VALUES+3, .idx = 1, .read = AInp_ReadPhValue, .write=0 },
+	{.addr=START_REG_VALUES+4, .idx = 1, .read = AInp_ReadPhValue, .write=0 },
 	// Системное значение PH ( умноженное на 10 ) 
 	//( берется с датчика PH №1. Если разбег значений датчиков 1 и 2 больше +-0.5, то -1 )
-	{.addr=START_REG_VALUES+4, .idx = 0, .read = AInp_ReadSystemPh, .write=0 },
+	{.addr=START_REG_VALUES+5, .idx = 0, .read = AInp_ReadSystemPh, .write=0 },
 	// Заданное значение PH ( умноженное на 10 )
-	{.addr=START_REG_VALUES+5, .idx = 0, .read = ReadSetupPhValue, .write=WriteSetupPhValue },
+	{.addr=START_REG_VALUES+6, .idx = 0, .read = ReadSetupPhValue, .write=WriteSetupPhValue },
 
 	// тарировочная точка 1 для датчика №1
-	{.addr=START_REG_TAR_POINT+0, .idx = 0, .read = AInp_ReadAdcTar1, .write=AInp_WriteAdcTar1 },
-	{.addr=START_REG_TAR_POINT+1, .idx = 0, .read = AInp_ReadPhTar1, .write=AInp_WritePhTar1 },
+	{.addr=START_REG_VALUES+7, .idx = 0, .read = AInp_ReadAdcTar1, .write=AInp_WriteAdcTar1 },
+	{.addr=START_REG_VALUES+8, .idx = 0, .read = AInp_ReadPhTar1, .write=AInp_WritePhTar1 },
 	// тарировочная точка 2 для датчика №1
-	{.addr=START_REG_TAR_POINT+2, .idx = 0, .read = AInp_ReadAdcTar2, .write=AInp_WriteAdcTar2 },
-	{.addr=START_REG_TAR_POINT+3, .idx = 0, .read = AInp_ReadPhTar2, .write=AInp_WritePhTar2 },
+	{.addr=START_REG_VALUES+9, .idx = 0, .read = AInp_ReadAdcTar2, .write=AInp_WriteAdcTar2 },
+	{.addr=START_REG_VALUES+10, .idx = 0, .read = AInp_ReadPhTar2, .write=AInp_WritePhTar2 },
 
 	// тарировочная точка 1 для датчика №2
-	{.addr=START_REG_TAR_POINT+4, .idx = 1, .read = AInp_ReadAdcTar1, .write=AInp_WriteAdcTar1 },
-	{.addr=START_REG_TAR_POINT+5, .idx = 1, .read = AInp_ReadPhTar1, .write=AInp_WritePhTar1 },
+	{.addr=START_REG_VALUES+11, .idx = 1, .read = AInp_ReadAdcTar1, .write=AInp_WriteAdcTar1 },
+	{.addr=START_REG_VALUES+12, .idx = 1, .read = AInp_ReadPhTar1, .write=AInp_WritePhTar1 },
 	// тарировочная точка 2 для датчика №2
-	{.addr=START_REG_TAR_POINT+6, .idx = 1, .read = AInp_ReadAdcTar2, .write=AInp_WriteAdcTar2 },
-	{.addr=START_REG_TAR_POINT+7, .idx = 1, .read = AInp_ReadPhTar2, .write=AInp_WritePhTar2 },
+	{.addr=START_REG_VALUES+13, .idx = 1, .read = AInp_ReadAdcTar2, .write=AInp_WriteAdcTar2 },
+	{.addr=START_REG_VALUES+14, .idx = 1, .read = AInp_ReadPhTar2, .write=AInp_WritePhTar2 },
 
 	// пропорциональный коэффициент 
-	{.addr=START_REG_COEFFICIENT+0, .idx = 0, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
+	{.addr=START_REG_VALUES+15, .idx = 0, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
 	// интегральный коэффициент 
-	{.addr=START_REG_COEFFICIENT+1, .idx = 1, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
+	{.addr=START_REG_VALUES+16, .idx = 1, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
 	// дифференциальный коэффициент 
-	{.addr=START_REG_COEFFICIENT+2, .idx = 2, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
+	{.addr=START_REG_VALUES+17, .idx = 2, .read = Reg_ReadCoefficient, .write=Reg_WriteCoefficient },
 	
 	// таймаут в секундах задержки включения насоса и процесса регулирования после подачи воды
-	{.addr=START_REG_TIME_DEFINE+0, .idx = 0, .read = Reg_Read_TIMEOUT_REGULATOR_ON_SEC, .write=Reg_Write_TIMEOUT_REGULATOR_ON_SEC },
+	{.addr=START_REG_VALUES+18, .idx = 0, .read = Reg_Read_TIMEOUT_REGULATOR_ON_SEC, .write=Reg_Write_TIMEOUT_REGULATOR_ON_SEC },
 	// максимальное время в секундах отклонения значения PH от задания PH для остановки регулятора и насоса
-	{.addr=START_REG_TIME_DEFINE+1, .idx = 0, .read = Reg_Read_TIMEOUT_ERROR_PH_SEC, .write=Reg_Write_TIMEOUT_ERROR_PH_SEC },
+	{.addr=START_REG_VALUES+19, .idx = 0, .read = Reg_Read_TIMEOUT_ERROR_PH_SEC, .write=Reg_Write_TIMEOUT_ERROR_PH_SEC },
 	// длительность интервала дозации
-	{.addr=START_REG_TIME_DEFINE+2, .idx = 0, .read = Reg_Read_REG_CYCLETIME_SEC, .write=Reg_Write_REG_CYCLETIME_SEC },
+	{.addr=START_REG_VALUES+20, .idx = 0, .read = Reg_Read_REG_CYCLETIME_SEC, .write=Reg_Write_REG_CYCLETIME_SEC },
 	// таймаут задержки отключения насоса в секундах (1-20)
-	{.addr=START_REG_TIME_DEFINE+3, .idx = 0, .read = Reg_Read_DELAY_PUMP_OFF_SEC, .write=Reg_Write_DELAY_PUMP_OFF_SEC },
+	{.addr=START_REG_VALUES+21, .idx = 0, .read = Reg_Read_DELAY_PUMP_OFF_SEC, .write=Reg_Write_DELAY_PUMP_OFF_SEC },
 	
 	// флаг - отсутствие воды (0-1)
-	{.addr=START_REG_MONITORING+0, .idx = MON_IsNoWater, .read = Reg_Read_MonitoringValue, .write=0 },
+	{.addr=START_REG_VALUES+22, .idx = MON_IsNoWater, .read = Reg_Read_MonitoringValue, .write=0 },
 	// флаг - ошибка датчиков
-	{.addr=START_REG_MONITORING+1, .idx = MON_IsErrSensors, .read = Reg_Read_MonitoringValue, .write=0 },
+	{.addr=START_REG_VALUES+23, .idx = MON_IsErrSensors, .read = Reg_Read_MonitoringValue, .write=0 },
 	// флаг - ошибка регулирования
-	{.addr=START_REG_MONITORING+2, .idx = MON_IsErrTimeoutSetupPh, .read = Reg_Read_MonitoringValue, .write=0 },
+	{.addr=START_REG_VALUES+24, .idx = MON_IsErrTimeoutSetupPh, .read = Reg_Read_MonitoringValue, .write=0 },
 	
 	// установленное значение PH
-	{.addr=START_REG_MONITORING+3, .idx = MON_PH_Setup, .read = Reg_Read_MonitoringValue, .write=0 },
+	{.addr=START_REG_VALUES+25, .idx = MON_PH_Setup, .read = Reg_Read_MonitoringValue, .write=0 },
 	// текущее значение PH1
-	{.addr=START_REG_MONITORING+4, .idx = MON_PH1_Current, .read = Reg_Read_MonitoringValue, .write=0 },
+	{.addr=START_REG_VALUES+26, .idx = MON_PH1_Current, .read = Reg_Read_MonitoringValue, .write=0 },
 	// текущее значение PH2
-	{.addr=START_REG_MONITORING+5, .idx = MON_PH2_Current, .read = Reg_Read_MonitoringValue, .write=0 },
+	{.addr=START_REG_VALUES+27, .idx = MON_PH2_Current, .read = Reg_Read_MonitoringValue, .write=0 },
 	
 	// % открытия регулятора
-	{.addr=START_REG_MONITORING+6, .idx = MON_RegPercentOn, .read = Reg_Read_MonitoringValue, .write=0 },
+	{.addr=START_REG_VALUES+28, .idx = MON_RegPercentOn, .read = Reg_Read_MonitoringValue, .write=0 },
 	// значение PID * 100;
-	{.addr=START_REG_MONITORING+7, .idx = MON_PID_Value, .read = Reg_Read_MonitoringValue, .write=0 },
+	{.addr=START_REG_VALUES+29, .idx = MON_PID_Value, .read = Reg_Read_MonitoringValue, .write=0 },
 	// знак PID 
-	{.addr=START_REG_MONITORING+8, .idx = MON_PID_Positive, .read = Reg_Read_MonitoringValue, .write=0 },
+	{.addr=START_REG_VALUES+30, .idx = MON_PID_Positive, .read = Reg_Read_MonitoringValue, .write=0 },
 	// DeltaPercent;
-	{.addr=START_REG_MONITORING+9, .idx = MON_DeltaPercent, .read = Reg_Read_MonitoringValue, .write=0 },
+	{.addr=START_REG_VALUES+31, .idx = MON_DeltaPercent, .read = Reg_Read_MonitoringValue, .write=0 },
 	// знак DeltaPercent 
-	{.addr=START_REG_MONITORING+10, .idx = MON_DeltaPercentPositive, .read = Reg_Read_MonitoringValue, .write=0 },
+	{.addr=START_REG_VALUES+32, .idx = MON_DeltaPercentPositive, .read = Reg_Read_MonitoringValue, .write=0 },
 	// длительность открытия клапана в мс.
-	{.addr=START_REG_MONITORING+11, .idx = MON_ImpulseTime_ms, .read = Reg_Read_MonitoringValue, .write=0 },
+	{.addr=START_REG_VALUES+33, .idx = MON_ImpulseTime_ms, .read = Reg_Read_MonitoringValue, .write=0 },
 	
 	// таблица оптимальных значений регулятора
 	// чтение таблицы
 	// Первая запись
-	{.addr=START_REG_OPTVALUES+0, .idx = 0, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_def
-	{.addr=START_REG_OPTVALUES+1, .idx = 1, .read = Reg_OptValues_Read, .write=Reg_OptValues_Write },	// reg_value_opt_def
-	{.addr=START_REG_OPTVALUES+2, .idx = 2, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_user
-	{.addr=START_REG_OPTVALUES+3, .idx = 3, .read = Reg_OptValues_Read, .write=0 },	// reg_value_opt_calc
+	{.addr=START_REG_VALUES+34, .idx = 0, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_def
+	{.addr=START_REG_VALUES+35, .idx = 1, .read = Reg_OptValues_Read, .write=Reg_OptValues_Write },	// reg_value_opt_def
+	{.addr=START_REG_VALUES+36, .idx = 2, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_user
+	{.addr=START_REG_VALUES+37, .idx = 3, .read = Reg_OptValues_Read, .write=0 },	// reg_value_opt_calc
 	// Вторая запись
-	{.addr=START_REG_OPTVALUES+4, .idx = 4, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_def
-	{.addr=START_REG_OPTVALUES+5, .idx = 5, .read = Reg_OptValues_Read, .write=Reg_OptValues_Write },	// reg_value_opt_def
-	{.addr=START_REG_OPTVALUES+6, .idx = 6, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_user
-	{.addr=START_REG_OPTVALUES+7, .idx = 7, .read = Reg_OptValues_Read, .write=0 },	// reg_value_opt_calc
+	{.addr=START_REG_VALUES+38, .idx = 4, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_def
+	{.addr=START_REG_VALUES+39, .idx = 5, .read = Reg_OptValues_Read, .write=Reg_OptValues_Write },	// reg_value_opt_def
+	{.addr=START_REG_VALUES+40, .idx = 6, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_user
+	{.addr=START_REG_VALUES+41, .idx = 7, .read = Reg_OptValues_Read, .write=0 },	// reg_value_opt_calc
 	// Третья запись
-	{.addr=START_REG_OPTVALUES+8, .idx = 8, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_def
-	{.addr=START_REG_OPTVALUES+9, .idx = 9, .read = Reg_OptValues_Read, .write=Reg_OptValues_Write },	// reg_value_opt_def
-	{.addr=START_REG_OPTVALUES+10, .idx =10, .read = Reg_OptValues_Read, .write=0 },// ph_setup_user
-	{.addr=START_REG_OPTVALUES+11, .idx =11, .read = Reg_OptValues_Read, .write=0 },// reg_value_opt_calc
+	{.addr=START_REG_VALUES+42, .idx = 8, .read = Reg_OptValues_Read, .write=0 },	// ph_setup_def
+	{.addr=START_REG_VALUES+43, .idx = 9, .read = Reg_OptValues_Read, .write=Reg_OptValues_Write },	// reg_value_opt_def
+	{.addr=START_REG_VALUES+44, .idx =10, .read = Reg_OptValues_Read, .write=0 },// ph_setup_user
+	{.addr=START_REG_VALUES+45, .idx =11, .read = Reg_OptValues_Read, .write=0 },// reg_value_opt_calc
 };
 
 //--- FUNCTIONS ------------------
