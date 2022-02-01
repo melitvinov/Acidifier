@@ -194,6 +194,8 @@ int AInp_ReadSystemPh( uint16_t idx )
 	return ivalue;
 }
 
+extern uint8_t g_WdtAInp;
+
 /*******************************************************
 Поток		: Получение и обработка значений датчиков PH
 Параметр 1	: не используется
@@ -231,6 +233,8 @@ void AInp_Thread( void *pvParameters )
 
 	for(;;)
 	{
+		g_WdtAInp = 1;
+		
 		// Wait for the next cycle.
 		vTaskDelayUntil( &xLastWakeTime, xFrequency );
 

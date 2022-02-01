@@ -181,6 +181,8 @@ void makeModbusAnswer( uint8_t slaveId, uint8_t funcId, uint8_t * data, uint8_t 
 	// Готово! Сформированный пакет лежит в Mbus_Answer, можно отпрвлять.
 }
 
+extern uint8_t g_WdtModbus;
+
 /*******************************************************
 Поток		: Функциональность modbus
 Параметр 1	: не используется
@@ -205,6 +207,8 @@ void MBUS_Thread( void *pvParameters )
 	{
 		vTaskDelay(1);
 
+		g_WdtModbus = 1;
+		
 		if( IsPacketReady )
 		{
 			LedSYS( 1 );

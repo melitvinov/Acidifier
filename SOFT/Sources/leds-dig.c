@@ -217,6 +217,8 @@ void LcdDig_ShowBegin( void )
 	vTaskDelay(500);
 }
 
+extern uint8_t g_WdtLeds;
+
 /*******************************************************
 Поток		: Обновляет индикатор
 Параметр 1	: не используется
@@ -236,6 +238,8 @@ void Thread_Leds_Dig( void *pvParameters )
 	xLastWakeTime = xTaskGetTickCount();
 	for(;;)
 	{
+		g_WdtLeds = 1;
+		
 		// Wait for the next cycle.
 		vTaskDelayUntil( &xLastWakeTime, CYCLETIME_MS );
 

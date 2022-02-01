@@ -62,6 +62,10 @@ TimerHandle_t TimerPump;
 TimerHandle_t TimerRegulator;
 TimerHandle_t TimerCalcPid;
 
+extern uint8_t g_WdtRegulator;
+extern uint8_t g_WdtKlapan;
+extern uint8_t g_WdtPid;
+
 //--- FUNCTIONS ------------------
 extern int ReadWorkMode( uint16_t idx );
 
@@ -356,6 +360,8 @@ void Thread_Pid( void *pvParameters )
 		
 	for(;;)
 	{
+		g_WdtPid = 1;
+		
 		vTaskDelayUntil( &xLastWakeTime, PERIOD_MS );
 
 		if( IsRegulatingOn() && g_CalcPidStarted )
@@ -406,6 +412,8 @@ void Thread_Klapan( void *pvParameters )
 	TickType_t xLastWakeTime, xCurrTicks, xTickToNextCycle;
 	for(;;)
 	{
+		g_WdtKlapan = 1;
+		
 		// Проверяем что процесс регулирования разрешен
 		if( !IsRegulatingOn() )
 		{
@@ -539,11 +547,15 @@ void Thread_Regulator( void *pvParameters )
 	bool IsPhSensorsTooDiff;
 	//bool is_WaterOk_curr;
 
+	g_WdtRegulator = 1;
 	Reg_Init();
 
 	g_isNoWater = true;
 
-	vTaskDelay( 5000 );
+	vTaskDelay( 2500 );
+	g_WdtRegulator = 1;
+	vTaskDelay( 2500 );
+	g_WdtRegulator = 1;
 
 	xTaskCreate( Thread_Klapan, (const char*)"Klapan", configMINIMAL_STACK_SIZE, ( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 	xTaskCreate( Thread_Pid, (const char*)"Pid", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
@@ -567,6 +579,8 @@ void Thread_Regulator( void *pvParameters )
 	xLastWakeTime = xTaskGetTickCount();
 	for(;;)
 	{
+		g_WdtRegulator = 1;
+		
 		// Wait for the next cycle.
 		vTaskDelayUntil( &xLastWakeTime, REG_WUp_Time );
 
@@ -662,47 +676,6 @@ void Thread_Regulator( void *pvParameters )
 	}
 }
 
-
-/*******************************************************
-Функция		: Включает реле по его индексу
-Параметр 1	: индекс реле
-Возвр. знач.: нет
-********************************************************/
-/*
-void Reg_RelayOn(uint8_t indx)
-{
-	if( indx > 1 )
-		return;
-	
-	GPIO_PinWrite( Relay[indx].GPIOx, Relay[indx].pin, REL_ON );
-}
-*/
-/*******************************************************
-Функция		: Отключает реле по его индексу
-Параметр 1	: индекс реле
-Возвр. знач.: нет
-********************************************************/
-/*
-void Reg_RelayOff(uint8_t indx)
-{
-	if( indx > 1 )
-		return;
-	
-	GPIO_PinWrite( Relay[indx].GPIOx, Relay[indx].pin, REL_OFF );
-}
-*/
-/*******************************************************
-Функция		: Отключает оба реле
-Параметр 1	: нет
-Возвр. знач.: нет
-********************************************************/
-/*
-void Reg_RelayAllOff(void)
-{
-	GPIO_PinWrite( Relay[0].GPIOx, Relay[0].pin, REL_OFF );
-	GPIO_PinWrite( Relay[1].GPIOx, Relay[1].pin, REL_OFF );
-}
-*/
 /*******************************************************
 	Чтение коэффициентов PID регулятора
 ********************************************************/

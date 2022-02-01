@@ -29,6 +29,7 @@ const uint16_t UINT_VERSION = 103;
 const uint16_t DEFAULT_SETUP_PH = 50;
 const float MIN_VALUE_SETUP_PH = 20;
 const float MAX_VALUE_SETUP_PH = 100;
+const uint16_t WDT_TIME_SEC = 10; 		// время в сек. до срабатывания таймера без перезагрузки значения
 
 //--- GLOBAL VARIABLES -----------
 uint8_t g_DeviceAddr = 0;	// текущий адрес устройства на шине RS-485
@@ -49,72 +50,86 @@ bool g_isEscClick;
 
 int g_WaterCounter;
 
-//--- IRQ ------------------------
-/*
-void EXTI15_10_IRQHandler()
-{
-	// Make sure that interrupt flag is set
-	if( EXTI_GetITStatus(EXTI_Line11) != RESET ) 
-	{
-		// Clear interrupt flag
-		EXTI_ClearITPendingBit(EXTI_Line11);
-
-		g_WaterCounter++;
-	}    
-	
-	EXTI_ClearFlag(EXTI_Line11);
-	
-	__asm("nop");
-	__asm("nop");
-	__asm("nop");
-	__asm("nop");
-}
-
-void Init_EXTI(void)
-{
-	EXTI_InitTypeDef EXTI_InitStruct;
-	NVIC_InitTypeDef NVIC_InitStruct;
-	
-	// Enable clock for AFIO
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
-	
-	// Set pin as input
-	// Вход скорости ветра
-	GPIO_PinConfigure( PORT_SENS_WATER, PIN_SENS_WATER, GPIO_IN_PULL_UP, GPIO_MODE_INPUT );
-	
-	// Add IRQ vector to NVIC
-	// PB11 is connected to EXTI_Line11, which has EXTI4_IRQn vector
-	NVIC_InitStruct.NVIC_IRQChannel = EXTI4_IRQn;
-	// Set priority
-	NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0x00;
-	// Set sub priority
-	NVIC_InitStruct.NVIC_IRQChannelSubPriority = 0x00;
-	// Enable interrupt
-	NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
-	// Add to NVIC
-	NVIC_Init(&NVIC_InitStruct);
-
-	// Tell system that you will use PB0 for EXTI_Line0
-	GPIO_EXTILineConfig(GPIO_PortSourceGPIOB, GPIO_PinSource11);
-
-	// PB11 is connected to EXTI_Line11
-	EXTI_InitStruct.EXTI_Line = EXTI_Line11;
-	// Enable interrupt
-	EXTI_InitStruct.EXTI_LineCmd = ENABLE;
-	// Interrupt mode
-	EXTI_InitStruct.EXTI_Mode = EXTI_Mode_Interrupt;
-	// Triggers on rising and falling edge
-	EXTI_InitStruct.EXTI_Trigger = EXTI_Trigger_Rising;
-	// Add to EXTI
-	EXTI_Init(&EXTI_InitStruct);
-
-	NVIC_EnableIRQ(EXTI15_10_IRQn);	//Разрешаем прерывание в контроллере прерываний	
-}
-*/
+// WDT flags
+uint8_t g_WdtCheckAddr = 0;
+uint8_t g_WdtWork = 0;
+uint8_t g_WdtButtons = 0;
+uint8_t g_WdtModbus = 0;
+uint8_t g_WdtAInp = 0;
+uint8_t g_WdtLeds = 0;
+uint8_t g_WdtRegulator = 0;
+uint8_t g_WdtKlapan = 0;
+uint8_t g_WdtPid = 0;
 
 //--- FUNCTIONS ------------------
 
 void Thread_WORK( void *pvParameters );
+
+
+void initWdt( void )
+{
+	const uint16_t WDT_GEN_FREQ = 40000; 	// частота генератора Wdt в герцах
+	const uint16_t RELOAD_WDT_VALUE = WDT_TIME_SEC * ( WDT_GEN_FREQ / 256 );
+	
+	// включаем LSI
+	RCC_LSICmd(ENABLE);
+	while (RCC_GetFlagStatus(RCC_FLAG_LSIRDY) == RESET);
+	// разрешается доступ к регистрам IWDG
+	IWDG_WriteAccessCmd(IWDG_WriteAccess_Enable);
+	// устанавливаем предделитель
+	IWDG_SetPrescaler(IWDG_Prescaler_256);
+	// значение для перезагрузки
+	IWDG_SetReload(RELOAD_WDT_VALUE);	
+	// перезагрузим значение
+	IWDG_ReloadCounter();
+	// LSI должен быть включен
+	IWDG_Enable();
+}
+void resetWdt( void )
+{
+	g_WdtCheckAddr = 0;
+	g_WdtWork = 0;
+	g_WdtButtons = 0;
+	g_WdtModbus = 0;
+	g_WdtAInp = 0;
+	g_WdtLeds = 0;
+	g_WdtRegulator = 0;
+	g_WdtKlapan = 0;
+	g_WdtPid = 0;
+	
+	IWDG_ReloadCounter();
+}
+void ThreadCheckWdt( void *pvParameters )
+{
+	TickType_t xLastWakeTime;
+	const TickType_t xFrequency = (WDT_TIME_SEC - 2) * 1000;
+	
+	// Initialise the xLastWakeTime variable with the current time.
+	xLastWakeTime = xTaskGetTickCount();
+	bool isOk;
+	for(;;)
+	{
+         // Wait for the next cycle.
+		vTaskDelayUntil( &xLastWakeTime, xFrequency );
+		
+		// проверка всех потоков
+		isOk = g_WdtCheckAddr && g_WdtWork && g_WdtButtons && g_WdtModbus && g_WdtAInp && g_WdtLeds && g_WdtRegulator && g_WdtKlapan && g_WdtPid;
+		if( isOk )
+		{
+			// если все потоки работают, то сбрасываем сторожевой таймер
+			resetWdt();
+		}
+		else
+		{
+			// если нет, то ждем ресета
+			Leds_OnAll(); 
+			for(;;)
+			{
+				vTaskDelay(100);
+			}
+		}
+	}
+}
 
 /*******************************************************
 Функция		: Вкл. / выкл. тревоги
@@ -146,14 +161,18 @@ uint8_t GetDeviceAddress(void)
 Параметр 1	: не используется
 Возвр. знач.: бесконечный цикл
 ********************************************************/
-void CheckAddrChange( void *pvParameters )
+void ThreadCheckAddrChange( void *pvParameters )
 {
 	for(;;)
 	{
+		g_WdtCheckAddr = 1;
+		
 		uint16_t addr = ADRSW_GetAdr();
 		if( addr != g_DeviceAddr )
 		{
 			vTaskDelay(2000);
+			g_WdtCheckAddr = 1;
+			
 			if( addr == ADRSW_GetAdr() )
 			{
 				// адрес устройства изменился, меняем
@@ -162,6 +181,7 @@ void CheckAddrChange( void *pvParameters )
 				{
 					LedSYS( 1 );
 					vTaskDelay(200);
+					g_WdtCheckAddr = 1;
 					LedSYS( 0 );
 					vTaskDelay(200);
 				}
@@ -212,6 +232,8 @@ void Thread_Buttons( void *pvParameters )
 	
 	for(;;)
 	{
+		g_WdtButtons = 1;
+		
 		isBtnPlusPressedNow = _isBtnPlusPressed();
 		isBtnMinusPressedNow = _isBtnMinusPressed();
 		isBtnEscPressedNow = _isBtnEscPressed();
@@ -332,6 +354,7 @@ void Initialize()
 	Leds_init();
 	ADRSW_init();
 	Buttons_init();
+	initWdt();
 	
 	g_DeviceAddr = 0;
 }
@@ -408,7 +431,7 @@ int main(void)
 {
 	Initialize();
 	
-	xTaskCreate( CheckAddrChange, (const char*)"ADDRESS", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+	xTaskCreate( ThreadCheckAddrChange, (const char*)"ADDRESS", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
 	xTaskCreate( AInp_Thread, (const char*)"ANALOG", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
@@ -421,6 +444,8 @@ int main(void)
 	xTaskCreate( Thread_WORK, (const char*)"WORK", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
 	xTaskCreate( Thread_Regulator, (const char*)"Regulator", 512,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+	
+	xTaskCreate( ThreadCheckWdt, (const char*)"Wdt", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 	
 	/* Start the scheduler. */
 	vTaskStartScheduler();
@@ -603,19 +628,12 @@ void Thread_WORK( void *pvParameters )
 	g_WorkMode = Mode_RegulatorPh;
 	g_isNoWater = true;
 	
-//	for( int i=0; i<20; i++ )
-//	{
-//		LedSYS( 1 );
-//		vTaskDelay(100);
-//		LedSYS( 0 );
-//		vTaskDelay(100);
-//	}
 	
 	for(;;)
 	{
 		vTaskDelay(50);
 		
-		//setupMoveLeds();
+		g_WdtWork = 1;
 		
 		stopWork = g_isErrSensors || g_isErrTimeoutSetupPh || g_isNoWater;
 		
