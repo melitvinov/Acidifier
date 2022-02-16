@@ -25,6 +25,10 @@
 
 #define TIMEOUT_SENSORS_TOO_DIFF_MS		5000 // тайм-аут в мс для ошибки при разнице показаний датчиков PH больше порогового значения	
 
+#define MIN_REGULATOR_PERCENT			3	// минимально возможное открытие регулятора
+#define MAX_REGULATOR_PERCENT			95	// максимально возможное открытие регулятора
+#define MAX_ABS_PID						30	// максимально возможное значение PID
+
 // --- TYPES ---------------------
 
 #pragma pack(push,1)

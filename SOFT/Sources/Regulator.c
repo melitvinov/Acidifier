@@ -101,14 +101,17 @@ void OnTimerRegulator( TimerHandle_t xTimer )
 	else if( g_Setup_PH >= 5 ) index = 1;
 	else index = 2;
 	if( g_OptTablePoints[index].ph_setup_user != 0xFFFF && g_OptTablePoints[index].reg_value_opt_calc != 0xFFFF )
+	{
 		g_flRegPercentOn = ((float)g_OptTablePoints[index].reg_value_opt_calc) / 10.0;
+		g_flRegPercentOn /= 2;	// в начале регулирования ставим только половину сохраненного значения
+	}
 	else
 		g_flRegPercentOn = ((float)g_OptTablePoints[index].reg_value_opt_def) / 10.0;
 
-		if( g_flRegPercentOn > 100 )
+	if( g_flRegPercentOn > MAX_REGULATOR_PERCENT || g_flRegPercentOn < MIN_REGULATOR_PERCENT )
 	{
 		// !!! Ошибка
-		g_flRegPercentOn = 5;			// если при начальной установке положения регулятора произошла ошибка, ставим 5% открытия
+		g_flRegPercentOn = MIN_REGULATOR_PERCENT;			// если при начальной установке положения регулятора произошла ошибка, ставим 5% открытия
 	}
 	
 	xTimerStart( TimerCalcPid, 0 );
@@ -164,7 +167,7 @@ void Regulator_STOP(void)
 	g_CalcPidStarted = false;
 	
 	g_flDeltaPercent = 0;
-	g_flRegPercentOn = 0;
+	g_flRegPercentOn = MIN_REGULATOR_PERCENT;
 	g_PID_Value = 0;
 	g_PID_IntegralValue = 0;
 	g_RegulatorStarted = false;
@@ -353,11 +356,11 @@ void Reg_Init(void)
 ********************************************************/
 void Thread_Pid( void *pvParameters )
 {
-	float prop_value, integ_value, diff_value, error_ph;
+	float prop_value, integ_value, diff_value, error_ph, tmp_Pid;
 
 	TickType_t xLastWakeTime  = xTaskGetTickCount();
 	const TickType_t PERIOD_MS = 1000;
-		
+	
 	for(;;)
 	{
 		g_WdtPid = 1;
@@ -384,8 +387,20 @@ void Thread_Pid( void *pvParameters )
 			// сохраняем текущее значение Ph для будущих расчетов
 			g_prev_PhValue = g_Sensor_PH;
 
-			g_PID_Value = prop_value + integ_value + diff_value;
-			g_PID_Value *= -1.0;
+			tmp_Pid = prop_value + integ_value + diff_value;
+			if( fabs( tmp_Pid ) > MAX_ABS_PID )
+			{
+				if( tmp_Pid >= 0 ) 
+					tmp_Pid = MAX_ABS_PID;
+				else {
+					tmp_Pid = MAX_ABS_PID;
+					tmp_Pid *= -1.0;
+				}
+			}
+			
+			tmp_Pid *= -1.0;
+
+			g_PID_Value = tmp_Pid;
 		}
 	}
 }
@@ -431,10 +446,10 @@ void Thread_Klapan( void *pvParameters )
 		g_flDeltaPercent = g_PID_Value;
 		g_flRegPercentOn += g_flDeltaPercent;
 		
-		if( g_flRegPercentOn > 95 )
-			g_flRegPercentOn = 95;
-		if( g_flRegPercentOn < 0 )
-			g_flRegPercentOn = 0;
+		if( g_flRegPercentOn > MAX_REGULATOR_PERCENT )
+			g_flRegPercentOn = MAX_REGULATOR_PERCENT;
+		if( g_flRegPercentOn < MIN_REGULATOR_PERCENT )
+			g_flRegPercentOn = MIN_REGULATOR_PERCENT;
 
 		g_ImpulseTime_ms = (g_REGULATOR_CYCLETIME_SEC * 10) * g_flRegPercentOn;
 		
