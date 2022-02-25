@@ -638,7 +638,7 @@ void Thread_Regulator( void *pvParameters )
 		
 		// проверяем ошибки по датчикам PH и выводим на дисплей значения PH
 		g_Sensor_PH = AInp_GetSystemPh( &IsPhSensorsTooDiff );
-		if( g_Sensor_PH < 0 || IsPhSensorsTooDiff )
+		if( g_Sensor_PH < 0 /*|| IsPhSensorsTooDiff*/ )
 		{
 			if( !g_isErrSensors )
 			{
