@@ -319,7 +319,7 @@ void Thread_Regulator( void *pvParameters )
 			if( !g_isErrSensors )
 			{
 				timeOutErrorPhSensors  += REGULATOR_CYCLETIME_MS;
-				if( timeOutErrorPhSensors > (MAX_OUT_OF_WATER_SEC * 1000) )
+				if( timeOutErrorPhSensors > (MAX_TIME_ERROR_PH_SEC * 1000) )
 				{
 					g_isErrSensors = true;
 					timeOutErrorPhSensors = 0;
