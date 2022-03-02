@@ -24,7 +24,7 @@
 // --- TYPES ---------------------
 
 //--- CONSTANTS ------------------
-const uint16_t UINT_VERSION = 104;
+const uint16_t UINT_VERSION = 105;
 
 const uint16_t DEFAULT_SETUP_PH = 50;
 const float MIN_VALUE_SETUP_PH = 20;
@@ -358,69 +358,6 @@ void Initialize()
 	
 	g_DeviceAddr = 0;
 }
-
-/*******************************************************
-Поток		: Рабочий поток устройства
-Параметр 1	: не используется
-Возвр. знач.: бесконечный цикл
-********************************************************/
-/*
-void Thread_RegulatorCalibrate( void *pvParameters )
-{
-	const uint16_t STEP_MS = 300;
-	uint8_t stepNum = 0;
-	float litres_by_minute;
-	char szLog[50];
-	
-	Rs485_Init();
-	
-	vTaskDelay(5000);
-	Reg_Init();
-	
-	Init_EXTI();
-	
-	set_StartCalibrateState( &stepNum );
-	
-	for(;;)
-	{
-		vTaskDelay( 100 );
-		if( _isBtnPlusPressed() )
-		{
-			stepNum++;
-			LcdDig_PrintUInt( stepNum, SideLEFT, true );
-			LcdDig_PrintPH( -1, SideRIGHT, false );
-			
-			Reg_RelayOn( REL_PH_MINUS );
-			vTaskDelay( STEP_MS );
-			Reg_RelayAllOff();
-			
-			g_WaterCounter = 0;
-			
-			vTaskDelay( 3000 );
-			
-			litres_by_minute = g_WaterCounter * 20;
-			litres_by_minute /= 530.0;
-			
-			LcdDig_PrintUInt( stepNum, SideLEFT, false );
-			sprintf( szLog, "%u\t%.2f\r\n", stepNum, litres_by_minute );
-			RS485_SendString( szLog );
-			
-			if( litres_by_minute < 10 )
-			{
-				litres_by_minute = (roundf( litres_by_minute * 10.0 )) / 10.0;
-				LcdDig_PrintPH( litres_by_minute, SideRIGHT, false );
-			}
-			else
-				LcdDig_PrintUInt( (uint8_t) litres_by_minute, SideRIGHT, false );
-		}
-		if( _isBtnMinusPressed() )
-		{
-			set_StartCalibrateState( &stepNum );
-		}
-		
-	}
-}
-*/
 
 /*******************************************************
 Функция		: Точка старта приложения

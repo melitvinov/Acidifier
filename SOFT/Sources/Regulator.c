@@ -15,12 +15,18 @@
 
 //--- CONSTANTS ------------------
 
-const float K_INTEGRAL_DEFAULT = 0.15;
-const float K_DIFF_DEFAULT = 10.0;
-const float K_PROP_DEFAULT = 5.0;
-const uint16_t REG_CYCLETIME_SEC_DEFAULT = 6;
-const uint16_t MIN_REG_CYCLETIME_SEC = 3;		// минимальный период регулятора в секундах
-const uint16_t MAX_REG_CYCLETIME_SEC = 20;		// максимальный период регулятора в секундах
+const float K_PROP_DEFAULT 					= 5.0;
+const float K_DIFF_DEFAULT 					= 1.0;
+const float K_INTEGRAL_DEFAULT 				= 0.15;
+const uint16_t REG_CYCLETIME_SEC_DEFAULT 	= 3;
+
+const uint16_t MIN_REG_CYCLETIME_SEC 		= 3;	// минимальный период регулятора в секундах
+const uint16_t MAX_REG_CYCLETIME_SEC 		= 10;	// максимальный период регулятора в секундах
+
+const uint16_t TIMEOUT_SENSORS_TOO_DIFF_MS 	= 5000; // тайм-аут в мс для ошибки при разнице показаний датчиков PH больше порогового значения	
+const uint16_t MIN_REGULATOR_PERCENT 		= 5;	// минимально возможное открытие регулятора в %
+const uint16_t MAX_REGULATOR_PERCENT		= 95;	// максимально возможное открытие регулятора в %
+const uint16_t MAX_ABS_PID 					= 30;	// максимально возможное значение PID
 
 const int MIN_REGIMP_PACK_TIME_MS = 250;			// минимальная длина импульса регулятора в пачке
 const int MIN_REGIMP_ONE_TIME_MS = 100;				// минимальная длина импульса регулятора в пачке
@@ -152,6 +158,10 @@ void Regulator_START(void)
 
 	// Включаем насос
 	switch_PUMP( 1 );
+	// После включения насоса открываем дозатор на 0,5 сек чтобы сбросить вакуум
+	switch_VALVE( 1 );
+	vTaskDelay(500);
+	switch_VALVE( 0 );
 }
 
 void Regulator_STOP(void) 
@@ -183,6 +193,11 @@ void Regulator_STOP(void)
 	
 		// через таймер не вышло, отключаем сразу
 		switch_PUMP( 0 ); 
+		// После отключения насоса и небольшой задержки открываем дозатор на 0,5 сек чтобы сбросить вакуум
+		vTaskDelay(500);
+		switch_VALVE( 1 );
+		vTaskDelay(500);
+		switch_VALVE( 0 );
 	}
 }
 
@@ -807,7 +822,7 @@ int Reg_Read_DELAY_PUMP_OFF_SEC( uint16_t idx )
 }
 bool Reg_Write_DELAY_PUMP_OFF_SEC( uint16_t idx, uint16_t val )
 {
-	if( val > 20 ) val = 20;
+	if( val > 10 ) val = 10;
 	
 	// сохраняем в EEPROM
 	bool isWrited = FM24_WriteWords( EEADR_DELAY_PUMP_OFF_SEC, &val, 1 );
@@ -890,8 +905,10 @@ int Reg_Read_MonitoringValue( uint16_t idx )
 ********************************************************/
 bool Reg_Write_REG_CYCLETIME_SEC( uint16_t idx, uint16_t val )
 {
-	if( val < MIN_REG_CYCLETIME_SEC || val > MAX_REG_CYCLETIME_SEC )
-		return false;
+	if( val < MIN_REG_CYCLETIME_SEC )
+		val = MIN_REG_CYCLETIME_SEC;
+	else if( val > MAX_REG_CYCLETIME_SEC )
+		val = MAX_REG_CYCLETIME_SEC;
 	
 	// сохраняем в EEPROM
 	bool isWrited = FM24_WriteWords( EEADR_REG_CYCLETIME_SEC, &val, 1 );
