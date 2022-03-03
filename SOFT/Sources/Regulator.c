@@ -201,14 +201,6 @@ void switch_PUMP( uint8_t on )
 {
 	Led_OnOff( LED_WORK_OK, on );
 	GPIO_PinWrite( PORT_RELAY_PUMP, PIN_RELAY_PUMP, on );
-	
-	// После включения/отключения насоса открываем дозатор на 0,5 сек чтобы сбросить вакуум
-	// блокируем переключение потоков чтобы никто не мог переключить клапан кроме вызвавшего функцию
-	portENTER_CRITICAL();
-	switch_VALVE( 1 );
-	vTaskDelay(300);
-	switch_VALVE( 0 );
-	portEXIT_CRITICAL();
 }
 
 bool IsPumpTurnON( void )
@@ -250,7 +242,7 @@ void switch_VALVE( uint8_t on )
 		Led_OnOff( LED_VALVE, 0 );
 		GPIO_PinWrite( PORT_RELAY_VALVE , PIN_RELAY_VALVE, 1 );
 	}
-	else if( IsPumpTurnON() ) {
+	else /*if( IsPumpTurnON() )*/ {
 		Led_OnOff( LED_VALVE, 1 );
 		GPIO_PinWrite( PORT_RELAY_VALVE , PIN_RELAY_VALVE, 0 );
 	}
@@ -287,6 +279,7 @@ void Reg_Init(void)
 	
 	// Отключение насоса и клапана
 	GPIO_PinWrite( PORT_RELAY_PUMP, PIN_RELAY_PUMP, 0 );
+	Led_OnOff( LED_WORK_OK, 0 );
 	switch_VALVE( 0 );
 	
 	// Загружаем коэффициенты для расчета
@@ -445,7 +438,7 @@ void Thread_Klapan( void *pvParameters )
 		if( !IsRegulatingOn() )
 		{
 			// Если нет, закрываем клапан и ждем дальше
-			switch_VALVE(0);
+			//switch_VALVE(0);
 
 			vTaskDelay(50);
 			continue;
@@ -647,6 +640,13 @@ void Thread_Regulator( void *pvParameters )
 				// вода появилась, начинаем новый полив.
 				Regulator_START();
 			}
+			// После включения/отключения насоса открываем дозатор на 0,5 сек чтобы сбросить вакуум
+			// блокируем переключение потоков чтобы никто не мог переключить клапан кроме вызвавшего функцию
+			//portENTER_CRITICAL();
+			switch_VALVE( 1 );
+			vTaskDelay(300);
+			switch_VALVE( 0 );
+			//portEXIT_CRITICAL();
 			continue;
 		}
 		
