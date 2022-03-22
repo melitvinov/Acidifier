@@ -376,15 +376,17 @@ void Thread_Pid( void *pvParameters )
 		{
 			// при наличии воды и отсутсвии ошибок вычисляем величину PID
 			// ошибка Ph
-			error_ph = g_Setup_PH - g_Sensor_PH;
+			error_ph = g_Sensor_PH - g_Setup_PH;
 			// пропорциональный компонент
 			prop_value = g_K_PROP * error_ph;
+			
 			// интегральный компонент
 			integ_value =  g_K_INTEGRAL * error_ph;
 			// добавляем накопленный интегральный компонент
 			integ_value += g_PID_IntegralValue;
 			// сохраняем текущее значение накопленного интегрального компонента
 			g_PID_IntegralValue = integ_value;
+			
 			// дифференциальный компонент
 			diff_value = g_Sensor_PH - g_prev_PhValue;
 			diff_value *= g_K_DIFF;
@@ -393,6 +395,7 @@ void Thread_Pid( void *pvParameters )
 			g_prev_PhValue = g_Sensor_PH;
 
 			tmp_Pid = prop_value + integ_value + diff_value;
+			
 			if( fabs( tmp_Pid ) > MAX_ABS_PID )
 			{
 				if( tmp_Pid >= 0 ) 
@@ -403,7 +406,7 @@ void Thread_Pid( void *pvParameters )
 				}
 			}
 			
-			tmp_Pid *= -1.0;
+			//tmp_Pid *= -1.0;
 
 			g_PID_Value = tmp_Pid;
 		}
