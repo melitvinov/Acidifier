@@ -638,18 +638,30 @@ void Thread_Regulator( void *pvParameters )
 			if( g_isNoWater ) {
 				// вода пропала
 				Regulator_STOP();
+				
+				// добавлен сброс давления при пропадании воды методом открытия клапана на 3 сек.
+				//portENTER_CRITICAL();
+				for( int i=0; i<30; i++ )
+				{
+					switch_VALVE(1);
+					vTaskDelay(100);
+					g_WdtRegulator = 1;
+				}
+				switch_VALVE(0);
+				//portEXIT_CRITICAL();
 			}
 			else {
 				// вода появилась, начинаем новый полив.
 				Regulator_START();
+
+				// После включения насоса открываем дозатор на 0,5 сек чтобы сбросить вакуум
+				// блокируем переключение потоков чтобы никто не мог переключить клапан кроме вызвавшего функцию
+				//portENTER_CRITICAL();
+				switch_VALVE( 1 );
+				vTaskDelay(300);
+				switch_VALVE( 0 );
+				//portEXIT_CRITICAL();
 			}
-			// После включения/отключения насоса открываем дозатор на 0,5 сек чтобы сбросить вакуум
-			// блокируем переключение потоков чтобы никто не мог переключить клапан кроме вызвавшего функцию
-			//portENTER_CRITICAL();
-			switch_VALVE( 1 );
-			vTaskDelay(300);
-			switch_VALVE( 0 );
-			//portEXIT_CRITICAL();
 			continue;
 		}
 		
