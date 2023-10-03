@@ -460,7 +460,7 @@ void Thread_Klapan( void *pvParameters )
 			g_flRegPercentOn = MIN_REGULATOR_PERCENT;
 
 //!!! -- Тут зафиксирована длина цикла = 3 сек.		
-		g_REGULATOR_CYCLETIME_SEC = 3;
+// Отменено в прошивке 1.09		g_REGULATOR_CYCLETIME_SEC = 3;
 		
 		g_ImpulseTime_ms = (g_REGULATOR_CYCLETIME_SEC * 10) * g_flRegPercentOn;
 /*		
