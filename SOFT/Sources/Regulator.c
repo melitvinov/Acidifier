@@ -23,12 +23,12 @@ const uint16_t REG_CYCLETIME_SEC_DEFAULT 	= 6;
 const uint16_t MIN_REG_CYCLETIME_SEC 		= 3;	// минимальный период регулятора в секундах
 const uint16_t MAX_REG_CYCLETIME_SEC 		= 10;	// максимальный период регулятора в секундах
 
-const uint32_t TIMEOUT_SENSORS_TOO_DIFF_MS 	= 5000; // тайм-аут в мс для ошибки при разнице показаний датчиков PH больше порогового значения	
+const uint32_t TIMEOUT_SENSORS_TOO_DIFF_MS 	= 30000; // тайм-аут в мс для ошибки при разнице показаний датчиков PH больше порогового значения	
 const float MAX_PH_DELTA_FOR_ERROR			= 1.0;	// отклонение от задания для старта таймера ошибки по регулированию pH
 //const uint16_t MIN_REGULATOR_PERCENT 		= 5;	// минимально возможное открытие регулятора в %
 //const uint16_t MAX_REGULATOR_PERCENT		= 95;	// максимально возможное открытие регулятора в %
-const uint16_t MIN_REGULATOR_PERCENT 		= 1;	// минимально возможное открытие регулятора в %
-const uint16_t MAX_REGULATOR_PERCENT		= 99;	// максимально возможное открытие регулятора в %
+const uint16_t MIN_REGULATOR_PERCENT 		= 0;	// минимально возможное открытие регулятора в %
+const uint16_t MAX_REGULATOR_PERCENT		= 100;	// максимально возможное открытие регулятора в %
 const uint16_t MAX_ABS_PID 					= 30;	// максимально возможное значение PID
 
 const int MIN_REGIMP_PACK_TIME_MS = 250;			// минимальная длина импульса регулятора в пачке
@@ -689,7 +689,7 @@ void Thread_Regulator( void *pvParameters )
 		
 		// проверяем ошибки по датчикам PH и выводим на дисплей значения PH
 		g_Sensor_PH = AInp_GetSystemPh( &IsPhSensorsTooDiff );
-		if( g_Sensor_PH < 0 /*|| IsPhSensorsTooDiff*/ )
+		if( g_Sensor_PH < 0 || IsPhSensorsTooDiff )
 		{
 			if( !g_isErrSensors )
 			{
