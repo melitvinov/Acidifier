@@ -303,7 +303,7 @@ void Reg_Init(void)
 	
 	if( !FM24_ReadWords( EEADR_COEF_PROP, &(Koef[0]), 3 ) )
 		needSetupDef = true;
-	else if( Koef[0] == 0 || Koef[1] == 0 )
+	else if( Koef[0] == 0 ) //|| Koef[1] == 0 )
 		needSetupDef = true;
 
 	if( needSetupDef )
