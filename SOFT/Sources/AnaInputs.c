@@ -24,6 +24,8 @@ const uint8_t ainputs[] =
 
 const uint8_t PH_CHANNELS_COUNT = sizeof(ainputs) / sizeof( uint8_t );
 
+const float MAX_DELTA_PH1_PH2			= 1.0;	// отклонение между датчиками pH1 pH2 для старта таймера ошибки датчиков
+
 // тарировочная точка по умолчанию для датчиков PH
 const TTarPoint DefaultPhTarPoint_1 = {3400, 401};
 const TTarPoint DefaultPhTarPoint_2 = {2000, 701};
@@ -172,7 +174,7 @@ float AInp_GetSystemPh( bool * pIsTooDiff )
 	
 	float value = 0;
 	value = fabs( value1 - value2 );
-	*pIsTooDiff = ( value > 0.5 ) ? true : false;
+	*pIsTooDiff = ( value > MAX_DELTA_PH1_PH2 ) ? true : false;
 	
 	return value1;
 }

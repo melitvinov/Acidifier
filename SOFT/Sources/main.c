@@ -24,10 +24,10 @@
 // --- TYPES ---------------------
 
 //--- CONSTANTS ------------------
-const uint16_t UINT_VERSION = 109;
+const uint16_t UINT_VERSION = 201;
 
-const uint16_t DEFAULT_SETUP_PH = 50;
-const float MIN_VALUE_SETUP_PH = 20;
+const uint16_t DEFAULT_SETUP_PH = 70;
+const float MIN_VALUE_SETUP_PH = 40;
 const float MAX_VALUE_SETUP_PH = 100;
 const uint16_t WDT_TIME_SEC = 10; 		// время в сек. до срабатывания таймера без перезагрузки значения
 
@@ -59,7 +59,7 @@ uint8_t g_WdtAInp = 0;
 uint8_t g_WdtLeds = 0;
 uint8_t g_WdtRegulator = 0;
 uint8_t g_WdtKlapan = 0;
-uint8_t g_WdtPid = 0;
+//uint8_t g_WdtPid = 0;
 
 //--- FUNCTIONS ------------------
 
@@ -95,7 +95,7 @@ void resetWdt( void )
 	g_WdtLeds = 0;
 	g_WdtRegulator = 0;
 	g_WdtKlapan = 0;
-	g_WdtPid = 0;
+	//g_WdtPid = 0;
 	
 	IWDG_ReloadCounter();
 }
@@ -106,29 +106,49 @@ void ThreadCheckWdt( void *pvParameters )
 	
 	// Initialise the xLastWakeTime variable with the current time.
 	xLastWakeTime = xTaskGetTickCount();
-	bool isOk;
+	//bool isOk;
 	for(;;)
 	{
          // Wait for the next cycle.
 		vTaskDelayUntil( &xLastWakeTime, xFrequency );
 		
 		// проверка всех потоков
-		isOk = g_WdtCheckAddr && g_WdtWork && g_WdtButtons && g_WdtModbus && g_WdtAInp && g_WdtLeds && g_WdtRegulator && g_WdtKlapan && g_WdtPid;
-		if( isOk )
-		{
+		if( !g_WdtCheckAddr ) goto WdtWaitReset;
+		if( !g_WdtWork ) goto WdtWaitReset;
+		if( !g_WdtButtons ) goto WdtWaitReset;
+		if( !g_WdtModbus ) goto WdtWaitReset;
+		if( !g_WdtAInp ) goto WdtWaitReset;
+		if( !g_WdtLeds ) goto WdtWaitReset;
+		if( !g_WdtRegulator ) goto WdtWaitReset;
+		if( !g_WdtKlapan ) goto WdtWaitReset;
+		//if( !g_WdtPid ) goto WdtWaitReset;
+
+
+//		isOk = g_WdtCheckAddr && g_WdtWork && g_WdtButtons && g_WdtModbus && g_WdtAInp && g_WdtLeds && g_WdtRegulator && g_WdtKlapan && g_WdtPid;
+//		if( isOk )
+//		{
 			// если все потоки работают, то сбрасываем сторожевой таймер
 			resetWdt();
-		}
-		else
-		{
-			// если нет, то ждем ресета
-			Leds_OnAll(); 
+//		}
+//		else
+//		{
+//			// если нет, то ждем ресета
+//			Leds_OnAll(); 
+//			for(;;)
+//			{
+//				vTaskDelay(100);
+//			}
+//		}
+	}
+	
+	WdtWaitReset:
 			for(;;)
 			{
+				Leds_OnAll();
+				vTaskDelay(100);
+				Leds_OffAll();
 				vTaskDelay(100);
 			}
-		}
-	}
 }
 
 /*******************************************************

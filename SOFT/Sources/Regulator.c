@@ -15,17 +15,20 @@
 
 //--- CONSTANTS ------------------
 
-const float K_PROP_DEFAULT 					= 5.0;
-const float K_DIFF_DEFAULT 					= 1.0;
-const float K_INTEGRAL_DEFAULT 				= 0.15;
-const uint16_t REG_CYCLETIME_SEC_DEFAULT 	= 3;
+const float K_PROP_DEFAULT 					= 7.0;
+const float K_DIFF_DEFAULT 					= 0.0;
+const float K_INTEGRAL_DEFAULT 				= 0.0;
+const uint16_t REG_CYCLETIME_SEC_DEFAULT 	= 6;
 
 const uint16_t MIN_REG_CYCLETIME_SEC 		= 3;	// минимальный период регулятора в секундах
 const uint16_t MAX_REG_CYCLETIME_SEC 		= 10;	// максимальный период регулятора в секундах
 
-const uint16_t TIMEOUT_SENSORS_TOO_DIFF_MS 	= 5000; // тайм-аут в мс для ошибки при разнице показаний датчиков PH больше порогового значения	
-const uint16_t MIN_REGULATOR_PERCENT 		= 5;	// минимально возможное открытие регулятора в %
-const uint16_t MAX_REGULATOR_PERCENT		= 95;	// максимально возможное открытие регулятора в %
+const uint32_t TIMEOUT_SENSORS_TOO_DIFF_MS 	= 5000; // тайм-аут в мс для ошибки при разнице показаний датчиков PH больше порогового значения	
+const float MAX_PH_DELTA_FOR_ERROR			= 1.0;	// отклонение от задания для старта таймера ошибки по регулированию pH
+//const uint16_t MIN_REGULATOR_PERCENT 		= 5;	// минимально возможное открытие регулятора в %
+//const uint16_t MAX_REGULATOR_PERCENT		= 95;	// максимально возможное открытие регулятора в %
+const uint16_t MIN_REGULATOR_PERCENT 		= 1;	// минимально возможное открытие регулятора в %
+const uint16_t MAX_REGULATOR_PERCENT		= 99;	// максимально возможное открытие регулятора в %
 const uint16_t MAX_ABS_PID 					= 30;	// максимально возможное значение PID
 
 const int MIN_REGIMP_PACK_TIME_MS = 250;			// минимальная длина импульса регулятора в пачке
@@ -65,8 +68,8 @@ bool g_CalcPidStarted;					// флаг - расчет PID работает
 TOptTablePoint g_OptTablePoints[3];		
 
 //TimerHandle_t TimerPump;
-TimerHandle_t TimerRegulator;
-TimerHandle_t TimerCalcPid;
+TimerHandle_t TimerRegulatorStartDelay;
+//TimerHandle_t TimerCalcPid;
 
 extern uint8_t g_WdtRegulator;
 extern uint8_t g_WdtKlapan;
@@ -95,7 +98,7 @@ void switch_PUMP( uint8_t on );
 Функция		: Старт регулятора по таймеру
 Возвр. знач.: нет
 ********************************************************/
-void OnTimerRegulator( TimerHandle_t xTimer )
+void OnTimerRegulatorStartDelay( TimerHandle_t xTimer )
 {
 	configASSERT( xTimer );
 	
@@ -120,7 +123,7 @@ void OnTimerRegulator( TimerHandle_t xTimer )
 		g_flRegPercentOn = MIN_REGULATOR_PERCENT;			// если при начальной установке положения регулятора произошла ошибка, ставим 5% открытия
 	}
 	
-	xTimerStart( TimerCalcPid, 0 );
+//	xTimerStart( TimerCalcPid, 0 );
 	
 	g_RegulatorStarted = true;
 }
@@ -129,6 +132,7 @@ void OnTimerRegulator( TimerHandle_t xTimer )
 Функция		: Старт расчета PID по таймеру
 Возвр. знач.: нет
 ********************************************************/
+/*
 void OnTimerCalcPid( TimerHandle_t xTimer )
 {
 	configASSERT( xTimer );
@@ -136,6 +140,7 @@ void OnTimerCalcPid( TimerHandle_t xTimer )
 	xTimerStop( xTimer, 0 );
 	g_CalcPidStarted = true;
 }
+*/
 
 /*******************************************************
 Функция		: Включение регулятора. (после подачи воды)
@@ -149,9 +154,22 @@ void Regulator_START(void)
 	g_PID_IntegralValue = 0;			// накопленный интегральный компонент для расчета PID
 	g_prev_PhValue = 7;					// предыдущее значение Ph  для расчета PID
 	
+	TickType_t timerPeriod = g_TIMEOUT_REGULATOR_ON_SEC > 0 ? (g_TIMEOUT_REGULATOR_ON_SEC * 1000) : 100;
+	const TickType_t timerTryPeriod = 100;
+	
 	// устанавливаем таймер на старт процесса регулирования
-	xTimerChangePeriod( TimerRegulator, g_TIMEOUT_REGULATOR_ON_SEC > 0 ? (g_TIMEOUT_REGULATOR_ON_SEC * 1000) : 100, 0 );
-
+	if( xTimerChangePeriod( TimerRegulatorStartDelay, timerPeriod, timerTryPeriod ) == pdPASS )
+	{
+		// The command was successfully sent.
+		// OnTimerRegulatorStartDelay() вызовется после срабатывания таймера
+	}
+	else
+	{
+		// The command could not be sent, even after waiting for 100 ticks
+		// to pass.  Take appropriate action here.
+		OnTimerRegulatorStartDelay( TimerRegulatorStartDelay );
+	}
+	
 	// Останавливаем таймер насоса
 //	configASSERT( TimerPump );
 //	xTimerStop( TimerPump, 0 );
@@ -163,14 +181,11 @@ void Regulator_START(void)
 void Regulator_STOP(void) 
 {
 //	configASSERT( TimerPump )
-	configASSERT( TimerCalcPid )
-	configASSERT( TimerRegulator )
+//	configASSERT( TimerCalcPid )
+	configASSERT( TimerRegulatorStartDelay )
 
-	xTimerStop( TimerRegulator, 0 );
-	xTimerStop( TimerCalcPid, 0 );
-	
-	g_RegulatorStarted = false;
-	g_CalcPidStarted = false;
+	xTimerStop( TimerRegulatorStartDelay, 0 );
+//	xTimerStop( TimerCalcPid, 0 );
 	
 	g_flDeltaPercent = 0;
 	g_flRegPercentOn = MIN_REGULATOR_PERCENT;
@@ -359,6 +374,7 @@ void Reg_Init(void)
 Параметр 1	: не используется
 Возвр. знач.: бесконечный цикл
 ********************************************************/
+/*
 void Thread_Pid( void *pvParameters )
 {
 	float prop_value, integ_value, diff_value, error_ph, tmp_Pid;
@@ -412,6 +428,48 @@ void Thread_Pid( void *pvParameters )
 		}
 	}
 }
+*/
+
+void calc_pid( void ) 
+{
+	float prop_value, integ_value, diff_value, error_ph, tmp_Pid;
+	
+	// при наличии воды и отсутсвии ошибок вычисляем величину PID
+	// ошибка Ph
+	error_ph = g_Sensor_PH - g_Setup_PH;
+	// пропорциональный компонент
+	prop_value = g_K_PROP * error_ph;
+	
+	// интегральный компонент
+	integ_value =  g_K_INTEGRAL * error_ph;
+	// добавляем накопленный интегральный компонент
+	integ_value += g_PID_IntegralValue;
+	// сохраняем текущее значение накопленного интегрального компонента
+	g_PID_IntegralValue = integ_value;
+	
+	// дифференциальный компонент
+	diff_value = g_Sensor_PH - g_prev_PhValue;
+	diff_value *= g_K_DIFF;
+	
+	// сохраняем текущее значение Ph для будущих расчетов
+	g_prev_PhValue = g_Sensor_PH;
+
+	tmp_Pid = prop_value + integ_value + diff_value;
+	
+	if( fabs( tmp_Pid ) > MAX_ABS_PID )
+	{
+		if( tmp_Pid >= 0 ) 
+			tmp_Pid = MAX_ABS_PID;
+		else {
+			tmp_Pid = MAX_ABS_PID;
+			tmp_Pid *= -1.0;
+		}
+	}
+	
+	//tmp_Pid *= -1.0;
+
+	g_PID_Value = tmp_Pid;
+}
 
 /*******************************************************
 Поток		: Управление клапаном дозации
@@ -420,11 +478,7 @@ void Thread_Pid( void *pvParameters )
 ********************************************************/
 void Thread_Klapan( void *pvParameters )
 {
-//	const int MAX_IMP_COUNT_BY_CYCLE = 6;
-
-//	float prevPercentOn;
-//	bool cycleIsBreaked;
-	int impHigh_TimeMs, impLow_TimeMs;//, impCount;
+	int impHigh_TimeMs, impLow_TimeMs, restTimeMs, delayMs;
 	
 	switch_VALVE(0);
 	g_PID_IntegralValue = 0;
@@ -450,7 +504,10 @@ void Thread_Klapan( void *pvParameters )
 		// Запоминаем время начала цикла дозации
 		xLastWakeTime = xTaskGetTickCount();
 		
-		// насос включен, то вычисляем параметры импульсов
+		// вычисляем Pid
+		calc_pid();
+		
+		// насос включен, вычисляем параметры импульсов
 		g_flDeltaPercent = g_PID_Value;
 		g_flRegPercentOn += g_flDeltaPercent;
 		
@@ -463,75 +520,30 @@ void Thread_Klapan( void *pvParameters )
 // Отменено в прошивке 1.09		g_REGULATOR_CYCLETIME_SEC = 3;
 		
 		g_ImpulseTime_ms = (g_REGULATOR_CYCLETIME_SEC * 10) * g_flRegPercentOn;
-/*		
-		if( g_ImpulseTime_ms > MIN_REGIMP_ONE_TIME_MS )
-		{
-			for( impCount = MAX_IMP_COUNT_BY_CYCLE; impCount>0; impCount-- )
-			{
-				impHigh_TimeMs = g_ImpulseTime_ms / impCount;
-				
-				if( impHigh_TimeMs > MIN_REGIMP_PACK_TIME_MS )
-				{
-					// считаем суммарное время импульсов
-					int iSumImpulseMs = impHigh_TimeMs * impCount;
-					// считаем паузу между импульсами
-					impLow_TimeMs = (((g_REGULATOR_CYCLETIME_SEC * 1000)-100) - iSumImpulseMs) / impCount;
-					if( impLow_TimeMs > MIN_REGIMP_PACK_TIME_MS )
-					{
-						// если все импульсы укладываются в слот времени цикла - выходим
-						break;
-					}
-				}
-			}
-			
-			if( impCount == 0 && (impHigh_TimeMs > MIN_REGIMP_ONE_TIME_MS) )
-			{
-				impCount = 1;
-				impLow_TimeMs = (g_REGULATOR_CYCLETIME_SEC * 1000)-100 - impHigh_TimeMs;
-			}
-			
-			// сохраняем текущее значение регулятора
-			prevPercentOn = g_flRegPercentOn;
-			cycleIsBreaked = false;
-			while( impCount-- )
-			{
-				switch_VALVE(1);
-				vTaskDelay( impHigh_TimeMs );
-				switch_VALVE(0);
-				vTaskDelay( impLow_TimeMs );
-				
-				if( (fabs( g_flRegPercentOn - prevPercentOn ) > 5) || 
-						g_isNoWater || 
-						g_isErrSensors || 
-						g_isErrTimeoutSetupPh || 
-						(ReadWorkMode(0) != Mode_RegulatorPh) )
-				{
-					// если за время дозации данного цикла произошло изменение 
-					// значения регулятора больше чем на 5% или кончилась вода или возникли ошибки
-					// то бросаем этот цикл и делаем все заново чтобы ускорить реакцию на это изменение
-					cycleIsBreaked = true;
-					break;
-				}
-			}			
-
-			if(  cycleIsBreaked ) {
-				// что то случилось, идем в начало чтобы среагировать
-				continue;
-			}
-		}
-		else
-		{
-			g_ImpulseTime_ms = 0;
-			switch_VALVE(0);
-		}
-		*/
 		
 		impHigh_TimeMs = g_ImpulseTime_ms;
 		impLow_TimeMs = (g_REGULATOR_CYCLETIME_SEC * 1000)-100 - impHigh_TimeMs;
-		switch_VALVE(1);
-		vTaskDelay( impHigh_TimeMs );
+
+		// Открытие клапана дозации
+		restTimeMs = impHigh_TimeMs;
+		if( restTimeMs > 100 )
+			switch_VALVE(1);
+		while( restTimeMs > 0 ) {
+			delayMs = restTimeMs > 1000 ? 1000: restTimeMs + 1;
+			vTaskDelay( delayMs );
+			restTimeMs -= delayMs;
+			g_WdtKlapan = 1;
+		}
+		
+		// Закрытие клапана дозации
+		restTimeMs = impLow_TimeMs;
 		switch_VALVE(0);
-		vTaskDelay( impLow_TimeMs );
+		while( restTimeMs > 0 ) {
+			delayMs = restTimeMs > 1000 ? 1000: restTimeMs + 1;
+			vTaskDelay( delayMs );
+			restTimeMs -= delayMs;
+			g_WdtKlapan = 1;
+		}
 		
 		xCurrTicks = xTaskGetTickCount();
 		
@@ -569,7 +581,7 @@ void SaveRegulatorValue( float setup_PH, float value )
 void Thread_Regulator( void *pvParameters )
 {
 	const int REG_WUp_Time = 100; // время между циклами работы потока в мс.
-	const int TIMEOUT_DELAY_CALC_PID = 10000;	// время задержки начала расчета PID
+//	const int TIMEOUT_DELAY_CALC_PID = 10000;	// время задержки начала расчета PID
 	
 	TickType_t xLastWakeTime;
 	int timeOutErrorPhValue = 0;
@@ -592,22 +604,18 @@ void Thread_Regulator( void *pvParameters )
 	g_WdtRegulator = 1;
 
 	xTaskCreate( Thread_Klapan, (const char*)"Klapan", configMINIMAL_STACK_SIZE, ( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
-	xTaskCreate( Thread_Pid, (const char*)"Pid", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
+	//xTaskCreate( Thread_Pid, (const char*)"Pid", configMINIMAL_STACK_SIZE,	( void * ) NULL, ( tskIDLE_PRIORITY + 1 ), NULL);
 
-//	TimerPump = xTimerCreate("TimerPump", g_DELAY_PUMP_OFF_SEC > 0 ? (g_DELAY_PUMP_OFF_SEC * 1000) : 10,
+					 
+	TimerRegulatorStartDelay = xTimerCreate("TimerRegulator", g_TIMEOUT_REGULATOR_ON_SEC > 0 ? (g_TIMEOUT_REGULATOR_ON_SEC * 1000) : 10,
+                     pdTRUE, 		// The timers will auto-reload themselves when they expire.
+                     ( void * ) 0,	// The ID
+                     OnTimerRegulatorStartDelay );
+
+//	TimerCalcPid = xTimerCreate("TimerCalcPid", TIMEOUT_DELAY_CALC_PID,
 //                     pdTRUE, 		// The timers will auto-reload themselves when they expire.
 //                     ( void * ) 0,	// The ID
-//                     OnTimerPump );
-					 
-	TimerRegulator = xTimerCreate("TimerRegulator", g_TIMEOUT_REGULATOR_ON_SEC > 0 ? (g_TIMEOUT_REGULATOR_ON_SEC * 1000) : 10,
-                     pdTRUE, 		// The timers will auto-reload themselves when they expire.
-                     ( void * ) 0,	// The ID
-                     OnTimerRegulator );
-
-	TimerCalcPid = xTimerCreate("TimerCalcPid", TIMEOUT_DELAY_CALC_PID,
-                     pdTRUE, 		// The timers will auto-reload themselves when they expire.
-                     ( void * ) 0,	// The ID
-                     OnTimerCalcPid );
+//                     OnTimerCalcPid );
 					 
 	// Initialise the xLastWakeTime variable with the current time.
 	xLastWakeTime = xTaskGetTickCount();
@@ -641,12 +649,14 @@ void Thread_Regulator( void *pvParameters )
 				
 				// добавлен сброс давления при пропадании воды методом открытия клапана на 3 сек.
 				//portENTER_CRITICAL();
-				for( int i=0; i<30; i++ )
-				{
-					switch_VALVE(1);
-					vTaskDelay(100);
-					g_WdtRegulator = 1;
-				}
+				
+// Удалено для 2.01
+//				for( int i=0; i<30; i++ )
+//				{
+//					switch_VALVE(1);
+//					vTaskDelay(100);
+//					g_WdtRegulator = 1;
+//				}
 				switch_VALVE(0);
 				//portEXIT_CRITICAL();
 			}
@@ -657,9 +667,11 @@ void Thread_Regulator( void *pvParameters )
 				// После включения насоса открываем дозатор на 0,5 сек чтобы сбросить вакуум
 				// блокируем переключение потоков чтобы никто не мог переключить клапан кроме вызвавшего функцию
 				//portENTER_CRITICAL();
-				switch_VALVE( 1 );
-				vTaskDelay(300);
-				switch_VALVE( 0 );
+
+// Удалено для 2.01
+//				switch_VALVE( 1 );
+//				vTaskDelay(300);
+//				switch_VALVE( 0 );
 				//portEXIT_CRITICAL();
 			}
 			continue;
@@ -694,10 +706,10 @@ void Thread_Regulator( void *pvParameters )
 			timeOutErrorPhSensors = 0;
 		}
 
-		if( fabs( g_Sensor_PH - g_Setup_PH ) > 0.5 )
+		if( fabs( g_Sensor_PH - g_Setup_PH ) > MAX_PH_DELTA_FOR_ERROR )
 		{
 			timeOutErrorPhValue += REG_WUp_Time;
-			if( timeOutErrorPhValue > (g_TIMEOUT_ERROR_PH_SEC * 1000) )
+			if( timeOutErrorPhValue > ((uint32_t)g_TIMEOUT_ERROR_PH_SEC * 1000ul) )
 			{
 				timeOutErrorPhValue = 0;
 				g_isErrTimeoutSetupPh = true;
